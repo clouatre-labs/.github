@@ -1,0 +1,6 @@
+{
+  "name": "CI Result",
+  "description": "Aggregation job for org ruleset CI Result status check. Add your language-specific CI jobs and list them in the needs array.",
+  "iconName": "octicon check-circle",
+  "categories": ["continuous-integration"]
+}

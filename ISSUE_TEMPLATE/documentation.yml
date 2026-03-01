@@ -1,0 +1,33 @@
+name: Documentation
+description: Report missing, unclear, or incorrect documentation
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us improve the documentation!
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs improvement?
+      description: Which docs are missing, unclear, or incorrect?
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Location
+      description: Link to the docs page or file path, if applicable.
+      placeholder: "README.md, docs/guide.md, etc."
+    validations:
+      required: false
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Changes
+      description: How would you improve it?
+    validations:
+      required: false

@@ -1,0 +1,6 @@
+{
+  "name": "REUSE Compliance",
+  "description": "Check SPDX/REUSE license compliance for all files.",
+  "iconName": "octicon law",
+  "categories": ["continuous-integration"]
+}
