@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# TODO: Add language-specific CI jobs above this aggregation job.
+# Examples: lint, test, build, format, type-check.
+
+jobs:
+  ci-result:
+    name: CI Result
+    runs-on: ubuntu-latest
+    if: always()
+    # TODO: Add your CI job names to the needs array.
+    # needs: [lint, test, build]
+    steps:
+      - name: Verify all jobs passed or were skipped
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "::error::One or more CI jobs failed or were cancelled."
+            exit 1
+          fi
+          echo "All CI jobs passed or were skipped."
