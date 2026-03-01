@@ -51,9 +51,9 @@ else
       "bypass_mode": "always"
     },
     {
-      "actor_type": "CopilotAgent",
-      "actor_id": 38,
-      "bypass_mode": "always"
+      "actor_type": "Integration",
+      "actor_id": 1143301,
+      "bypass_mode": "exempt"
     }
   ],
   "conditions": {
