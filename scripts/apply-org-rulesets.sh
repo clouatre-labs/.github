@@ -12,14 +12,14 @@ DRY_RUN="${1:-false}"
 
 if [[ "${DRY_RUN}" == "true" ]]; then
   echo "=== Dry run: listing existing org rulesets ==="
-  gh api "/orgs/${ORG}/rulesets" --jq '.[] | {id, name, enforcement, target}'
+  gh api --paginate "/orgs/${ORG}/rulesets" --jq '.[] | {id, name, enforcement, target}'
   exit 0
 fi
 
 # Returns the ruleset id if a ruleset with the given name exists, empty string otherwise.
 get_ruleset_id() {
   local name="$1"
-  gh api "/orgs/${ORG}/rulesets" --jq --arg name "${name}" \
+  gh api --paginate "/orgs/${ORG}/rulesets" --jq --arg name "${name}" \
     '.[] | select(.name == $name) | .id' 2>/dev/null || true
 }
 
