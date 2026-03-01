@@ -4,7 +4,7 @@
 
 ## Related Issues
 
-<!-- Link issues: "Closes clouatre-labs/.github#123" or "Related to clouatre-labs/.github#456" -->
+<!-- Link issues: "Closes #123" or "Related to #456" -->
 
 ## Test Plan
 

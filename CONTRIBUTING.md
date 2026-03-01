@@ -45,9 +45,9 @@ AI agents and bots cannot sign commits. Their PRs are squash-merged by a maintai
 
 All three merge methods are available (merge, squash, rebase). Maintainers choose the appropriate method per PR:
 
-- **Squash merge** -- default for most PRs; produces a clean single commit
-- **Merge commit** -- for PRs where individual commit history matters
-- **Rebase merge** -- for linear history without a merge commit
+- **Squash merge** - default for most PRs; produces a clean single commit
+- **Merge commit** - for PRs where individual commit history matters
+- **Rebase merge** - for linear history without a merge commit
 
 ## Code of Conduct
 
