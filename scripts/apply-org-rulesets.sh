@@ -53,7 +53,7 @@ else
     {
       "actor_type": "Integration",
       "actor_id": 1143301,
-      "bypass_mode": "always"
+      "bypass_mode": "exempt"
     }
   ],
   "conditions": {
