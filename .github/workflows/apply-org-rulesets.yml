@@ -23,6 +23,7 @@ jobs:
         with:
           advanced-security: false
           annotations: true
+          min-severity: error
 
   apply:
     runs-on: ubuntu-24.04
