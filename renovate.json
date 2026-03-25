@@ -4,13 +4,14 @@
   "labels": ["dependencies"],
   "minimumReleaseAge": "3 days",
   "platformAutomerge": true,
+  "dependencyDashboard": false,
+  "schedule": ["before 6am on monday"],
+  "timezone": "UTC",
   "packageRules": [
     {
-      "matchUpdateTypes": ["patch", "minor", "digest", "pin", "lockFileMaintenance"],
-      "automerge": true
-    },
-    {
+      "groupName": "github-actions",
       "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch", "minor", "digest", "pin", "lockFileMaintenance"],
       "automerge": true
     }
   ]
