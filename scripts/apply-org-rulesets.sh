@@ -28,14 +28,7 @@ get_ruleset_id() {
 RULESET_NAME="Main Branch Protection"
 EXISTING_ID="$(get_ruleset_id "${RULESET_NAME}")"
 
-if [[ -n "${EXISTING_ID}" ]]; then
-  echo "Ruleset '${RULESET_NAME}' already exists (id=${EXISTING_ID}). Skipping."
-else
-  echo "Creating ruleset '${RULESET_NAME}'..."
-  gh api --method POST "/orgs/${ORG}/rulesets" \
-    --header "Content-Type: application/json" \
-    --input - <<'EOF'
-{
+MAIN_BRANCH_PAYLOAD='{
   "name": "Main Branch Protection",
   "target": "branch",
   "enforcement": "evaluate",
@@ -92,8 +85,19 @@ else
       }
     }
   ]
-}
-EOF
+}'
+
+if [[ -n "${EXISTING_ID}" ]]; then
+  echo "Ruleset '${RULESET_NAME}' exists (id=${EXISTING_ID}). Patching..."
+  echo "${MAIN_BRANCH_PAYLOAD}" | gh api --method PATCH "/orgs/${ORG}/rulesets/${EXISTING_ID}" \
+    --header "Content-Type: application/json" \
+    --input -
+  echo "Ruleset '${RULESET_NAME}' patched."
+else
+  echo "Creating ruleset '${RULESET_NAME}'..."
+  echo "${MAIN_BRANCH_PAYLOAD}" | gh api --method POST "/orgs/${ORG}/rulesets" \
+    --header "Content-Type: application/json" \
+    --input -
   echo "Ruleset '${RULESET_NAME}' created."
 fi
 
@@ -102,14 +106,7 @@ fi
 RULESET_NAME="Release Tag Protection"
 EXISTING_ID="$(get_ruleset_id "${RULESET_NAME}")"
 
-if [[ -n "${EXISTING_ID}" ]]; then
-  echo "Ruleset '${RULESET_NAME}' already exists (id=${EXISTING_ID}). Skipping."
-else
-  echo "Creating ruleset '${RULESET_NAME}'..."
-  gh api --method POST "/orgs/${ORG}/rulesets" \
-    --header "Content-Type: application/json" \
-    --input - <<'EOF'
-{
+RELEASE_TAG_PAYLOAD='{
   "name": "Release Tag Protection",
   "target": "tag",
   "enforcement": "active",
@@ -138,8 +135,19 @@ else
   "rules": [
     { "type": "creation" }
   ]
-}
-EOF
+}'
+
+if [[ -n "${EXISTING_ID}" ]]; then
+  echo "Ruleset '${RULESET_NAME}' exists (id=${EXISTING_ID}). Patching..."
+  echo "${RELEASE_TAG_PAYLOAD}" | gh api --method PATCH "/orgs/${ORG}/rulesets/${EXISTING_ID}" \
+    --header "Content-Type: application/json" \
+    --input -
+  echo "Ruleset '${RULESET_NAME}' patched."
+else
+  echo "Creating ruleset '${RULESET_NAME}'..."
+  echo "${RELEASE_TAG_PAYLOAD}" | gh api --method POST "/orgs/${ORG}/rulesets" \
+    --header "Content-Type: application/json" \
+    --input -
   echo "Ruleset '${RULESET_NAME}' created."
 fi
 
