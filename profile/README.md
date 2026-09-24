@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://clouatre.ca">Blog</a> ·
-  <a href="https://clouatre.ca/about">About</a> ·
+  <a href="https://clouatre.ca/about/">About</a> ·
   <a href="https://github.com/clouatre-labs/aptu/issues/new/choose">Report an issue</a>
 </p>
 
