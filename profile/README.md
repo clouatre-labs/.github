@@ -1,15 +1,24 @@
 # Clouatre Labs
 
-AI and platform engineering — open-source tools, agent infrastructure, and published research.
+<p align="center">
+  AI and platform engineering — open-source tools, agent infrastructure, and published research.
+</p>
 
-We build practical AI-assisted software development tooling and share what we learn through reproducible experiments and writing at [clouatre.ca](https://clouatre.ca).
+<p align="center">
+  <a href="https://clouatre.ca">Blog</a> ·
+  <a href="https://clouatre.ca/about">About</a> ·
+  <a href="https://github.com/clouatre-labs/aptu/issues/new/choose">Report an issue</a>
+</p>
+
+---
+
+Practical AI-assisted software development tooling, built in the open. We share what we learn through reproducible experiments and writing at [clouatre.ca](https://clouatre.ca).
 
 ## Featured Projects
 
 - **[aptu](https://github.com/clouatre-labs/aptu)** — AI SDLC review harness for GitHub: structured context assembly for issue triage and PR review. Rust CLI, GitHub App, and GitHub Action.
 - **[aptu-coder](https://github.com/clouatre-labs/aptu-coder)** — On-device code-intelligence MCP server. Parses codebases into structural graphs so agents reason instead of re-deriving context.
 - **[decisions-judge-mcp](https://github.com/clouatre-labs/decisions-judge-mcp)** — Typed decisions for AI agents as an MCP tool: yes/no probabilities, choices, and scores on JSON state in one fast request.
-- **[aptu-app](https://github.com/clouatre-labs/aptu-app)** — Kotlin Multiplatform mobile client for the aptu ecosystem.
 
 ## Research & Experiments
 
