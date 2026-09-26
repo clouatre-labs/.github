@@ -38,6 +38,7 @@
         "digest",
         "pin"
       ],
+      "minimumReleaseAge": null,
       "automerge": true
     },
     {
