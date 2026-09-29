@@ -17,10 +17,11 @@ if [[ "${DRY_RUN}" == "true" ]]; then
 fi
 
 # Returns the ruleset id if a ruleset with the given name exists, empty string otherwise.
+# NOTE: gh api --jq does not support --arg, so the name is interpolated directly.
+# Callers pass only static, script-controlled names.
 get_ruleset_id() {
   local name="$1"
-  gh api --paginate "/orgs/${ORG}/rulesets" --jq --arg name "${name}" \
-    '.[] | select(.name == $name) | .id' 2>/dev/null || true
+  gh api --paginate "/orgs/${ORG}/rulesets" --jq ".[] | select(.name == \"${name}\") | .id" 2>/dev/null || true
 }
 
 # Returns the required status check context for Main Branch Protection.
@@ -32,8 +33,15 @@ get_ruleset_id() {
 get_required_check_name() {
   local value="${REQUIRED_CHECK_NAME:-}"
   if [[ -z "${value}" ]]; then
-    value="$(gh api "/orgs/${ORG}/actions/variables/REQUIRED_CHECK_NAME" --jq '.value' 2>/dev/null || true)"
+    # Assign inside the condition so a failed lookup (e.g. the App token
+    # lacking org-variable read access) leaves value empty instead of
+    # capturing gh's error JSON as the check name.
+    value="$(gh api "/orgs/${ORG}/actions/variables/REQUIRED_CHECK_NAME" --jq '.value' 2>/dev/null)" || value=""
   fi
+  # Accept only sane status-check context characters; anything else falls
+  # back to the default rather than corrupting the JSON payload.
+  local pat='^[A-Za-z0-9][A-Za-z0-9 ._/-]*$'
+  [[ "${value}" =~ ${pat} ]] || value=""
   if [[ -z "${value}" ]]; then
     value="CI Result"
   fi
