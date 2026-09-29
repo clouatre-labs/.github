@@ -118,7 +118,7 @@ MAIN_BRANCH_PAYLOAD="${MAIN_BRANCH_PAYLOAD//__REQUIRED_CHECK__/${REQUIRED_CHECK}
 
 if [[ -n "${EXISTING_ID}" ]]; then
   echo "Ruleset '${RULESET_NAME}' exists (id=${EXISTING_ID}). Patching..."
-  echo "${MAIN_BRANCH_PAYLOAD}" | gh api --method PATCH "/orgs/${ORG}/rulesets/${EXISTING_ID}" \
+  echo "${MAIN_BRANCH_PAYLOAD}" | gh api --method PUT "/orgs/${ORG}/rulesets/${EXISTING_ID}" \
     --header "Content-Type: application/json" \
     --input -
   echo "Ruleset '${RULESET_NAME}' patched."
@@ -168,7 +168,7 @@ RELEASE_TAG_PAYLOAD='{
 
 if [[ -n "${EXISTING_ID}" ]]; then
   echo "Ruleset '${RULESET_NAME}' exists (id=${EXISTING_ID}). Patching..."
-  echo "${RELEASE_TAG_PAYLOAD}" | gh api --method PATCH "/orgs/${ORG}/rulesets/${EXISTING_ID}" \
+  echo "${RELEASE_TAG_PAYLOAD}" | gh api --method PUT "/orgs/${ORG}/rulesets/${EXISTING_ID}" \
     --header "Content-Type: application/json" \
     --input -
   echo "Ruleset '${RULESET_NAME}' patched."
