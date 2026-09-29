@@ -23,10 +23,29 @@ get_ruleset_id() {
     '.[] | select(.name == $name) | .id' 2>/dev/null || true
 }
 
+# Returns the required status check context for Main Branch Protection.
+# Resolution order: REQUIRED_CHECK_NAME env var, org variable
+# REQUIRED_CHECK_NAME (via gh api), then default "CI Result".
+# The org variable lets repos that post a different check name
+# (e.g. homebrew-tap posting "Audit", see issue #38) be handled
+# without editing this script.
+get_required_check_name() {
+  local value="${REQUIRED_CHECK_NAME:-}"
+  if [[ -z "${value}" ]]; then
+    value="$(gh api "/orgs/${ORG}/actions/variables/REQUIRED_CHECK_NAME" --jq '.value' 2>/dev/null || true)"
+  fi
+  if [[ -z "${value}" ]]; then
+    value="CI Result"
+  fi
+  echo "${value}"
+}
+
 # ── Ruleset 1: Main Branch Protection ────────────────────────────────────────
 
 RULESET_NAME="Main Branch Protection"
 EXISTING_ID="$(get_ruleset_id "${RULESET_NAME}")"
+REQUIRED_CHECK="$(get_required_check_name)"
+echo "Required status check: ${REQUIRED_CHECK}"
 
 MAIN_BRANCH_PAYLOAD='{
   "name": "Main Branch Protection",
@@ -80,12 +99,14 @@ MAIN_BRANCH_PAYLOAD='{
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": false,
         "required_status_checks": [
-          { "context": "CI Result" }
+          { "context": "__REQUIRED_CHECK__" }
         ]
       }
     }
   ]
 }'
+
+MAIN_BRANCH_PAYLOAD="${MAIN_BRANCH_PAYLOAD//__REQUIRED_CHECK__/${REQUIRED_CHECK}}"
 
 if [[ -n "${EXISTING_ID}" ]]; then
   echo "Ruleset '${RULESET_NAME}' exists (id=${EXISTING_ID}). Patching..."
