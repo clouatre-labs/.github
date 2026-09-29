@@ -14,29 +14,33 @@ permissions: {}
 jobs:
   zizmor:
     name: zizmor
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
         with:
           advanced-security: false
           annotations: true
           min-severity: high
 
   apply:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04-arm
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0 # zizmor: ignore[github-app] scoped via permissions input; org ruleset PATCH needs administration write
+      - name: Mint GitHub App token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0 # zizmor: ignore[github-app] scoped via permissions input; org ruleset PATCH needs organization_administration write
         id: app-token
         with:
           app-id: ${{ vars.ORG_APP_ID }}
           private-key: ${{ secrets.ORG_APP_PRIVATE_KEY }}
           owner: clouatre-labs
-          permissions: '{"administration":"write"}'
+          permissions: '{"organization_administration":"write"}'
 
       - name: Apply org rulesets
         env:
