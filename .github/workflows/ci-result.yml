@@ -11,7 +11,7 @@ permissions: {}
 jobs:
   ci-result:
     name: CI Result
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04-arm
     if: always()
     permissions: {}
     steps:
