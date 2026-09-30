@@ -1,0 +1,60 @@
+name: Apply Org Settings
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  push:
+    branches: [main]
+    paths: ['safe-settings/**']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List repos and desired state without applying (true/false)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: apply-org-settings
+  cancel-in-progress: false
+
+jobs:
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-26.04-arm
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          advanced-security: false
+          annotations: true
+          min-severity: high
+
+  apply:
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Mint GitHub App token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0 # zizmor: ignore[github-app] scoped via permission-organization-administration and permission-administration inputs; repo settings/label/topic updates need repo administration write in addition to organization administration write
+        id: app-token
+        with:
+          client-id: ${{ vars.ORG_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ORG_APP_PRIVATE_KEY }}
+          owner: clouatre-labs
+          permission-organization-administration: write
+          permission-administration: write
+
+      - name: Apply org settings
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          chmod +x scripts/apply-org-settings.sh
+          scripts/apply-org-settings.sh "${{ inputs.dry_run == true && 'true' || 'false' }}"
