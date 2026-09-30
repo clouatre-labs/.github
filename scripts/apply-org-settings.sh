@@ -106,17 +106,20 @@ apply_repo() {
   local label
   while IFS= read -r label; do
     [[ -z "${label}" ]] && continue
-    if ! echo "${label}" | gh api --method POST "/repos/${ORG}/${repo}/labels" \
-      --header "Content-Type: application/json" --input - >/dev/null 2>&1; then
-      local name color desc
+    local err
+    if ! err="$(echo "${label}" | gh api --method POST "/repos/${ORG}/${repo}/labels" \
+      --header "Content-Type: application/json" --input - 2>&1 >/dev/null)"; then
+      # POST failed (typically 422 already-exists): PATCH by name to update
+      # color/description. Never DELETE.
+      local name color desc patch_err
       name="$(echo "${label}" | jq -r '.name')"
       color="$(echo "${label}" | jq -r '.color')"
       desc="$(echo "${label}" | jq -r '.description')"
-      if ! echo "${label}" | jq -n --arg n "${name}" --arg c "${color}" --arg d "${desc}" \
+      if ! patch_err="$(echo "${label}" | jq -n --arg n "${name}" --arg c "${color}" --arg d "${desc}" \
         '{name: $n, new_name: $n, color: $c, description: $d}' |
         gh api --method PATCH "/repos/${ORG}/${repo}/labels/$(jq -rn --arg n "${name}" '$n | @uri')" \
-          --header "Content-Type: application/json" --input - >/dev/null 2>&1; then
-        echo "FAILED: label '${name}' for ${repo}"
+          --header "Content-Type: application/json" --input - 2>&1 >/dev/null)"; then
+        echo "FAILED: label '${name}' for ${repo}: POST: ${err} | PATCH: ${patch_err}"
         return 1
       fi
     fi
