@@ -26,7 +26,7 @@ get_ruleset_id() {
 
 # Returns the required status check context for Main Branch Protection.
 # Resolution order: REQUIRED_CHECK_NAME env var, org variable
-# REQUIRED_CHECK_NAME (via gh api), then default "CI Result".
+# REQUIRED_CHECK_NAME (via gh api), then default "DCO".
 # The org variable lets repos that post a different check name
 # (e.g. homebrew-tap posting "Audit", see issue #38) be handled
 # without editing this script.
@@ -43,7 +43,7 @@ get_required_check_name() {
   local pat='^[A-Za-z0-9][A-Za-z0-9 ._/-]*$'
   [[ "${value}" =~ ${pat} ]] || value=""
   if [[ -z "${value}" ]]; then
-    value="CI Result"
+    value="DCO"
   fi
   echo "${value}"
 }
