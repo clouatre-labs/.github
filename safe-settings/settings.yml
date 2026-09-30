@@ -1,0 +1,98 @@
+# Desired-state document mirroring scripts/apply-org-settings.sh.
+# The script is the source of truth and is what actually applies changes
+# (scheduled every 6 hours, on pushes to safe-settings/**, and on dispatch).
+# This file documents the desired state and drives the push-path trigger.
+#
+# Semantics: add/update-only. Labels are created or updated in place; existing
+# labels not listed here are preserved; nothing is ever deleted. Repos with
+# archived=true are skipped. Topics are logged only unless TOPICS is provided
+# to the script (the org has no topic standard yet).
+
+settings:
+  allow_squash_merge: true
+  squash_merge_commit_title: COMMIT_OR_PR_TITLE
+  squash_merge_commit_message: COMMIT_MESSAGES
+  allow_merge_commit: false
+  allow_rebase_merge: false
+  allow_auto_merge: true
+  delete_branch_on_merge: true
+  has_wiki: false
+  has_projects: false
+  has_discussions: false
+
+labels:
+  - name: bug
+    color: d73a4a
+    description: Something is not working
+  - name: documentation
+    color: 0075ca
+    description: Documentation only changes
+  - name: enhancement
+    color: a2eeef
+    description: New feature or request
+  - name: good first issue
+    color: 7057ff
+    description: Good for newcomers
+  - name: help wanted
+    color: 008672
+    description: Extra attention is needed
+  - name: invalid
+    color: fef2c0
+    description: This does not seem right
+  - name: question
+    color: d876e3
+    description: Further information is requested
+  - name: wontfix
+    color: ffffff
+    description: This will not be worked on
+  - name: feat
+    color: a2eeef
+    description: New feature
+  - name: fix
+    color: d73a4a
+    description: Bug fix
+  - name: docs
+    color: 0075ca
+    description: Documentation only changes
+  - name: chore
+    color: d4c5f9
+    description: Maintenance tasks
+  - name: refactor
+    color: c5def5
+    description: Code change that neither fixes a bug nor adds a feature
+  - name: test
+    color: bfd4f2
+    description: Adding or correcting tests
+  - name: ci
+    color: bfdadc
+    description: CI/CD pipeline changes
+  - name: perf
+    color: e99695
+    description: Performance improvement
+  - name: dependencies
+    color: 0366d6
+    description: Dependency updates
+  - name: security
+    color: ee0701
+    description: Security-related
+  - name: breaking-change
+    color: b60205
+    description: Breaking API or behavior change
+  - name: p1
+    color: b60205
+    description: "Priority 1: critical"
+  - name: p2
+    color: d93f0b
+    description: "Priority 2: high"
+  - name: p3
+    color: fbca04
+    description: "Priority 3: normal"
+  - name: epic
+    color: 5319e7
+    description: Cross-repo epic tracking
+  - name: governance
+    color: 3e6b8e
+    description: Org governance and policy
+  - name: infrastructure
+    color: 0e8a16
+    description: Org infrastructure and automation
