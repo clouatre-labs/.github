@@ -7,6 +7,13 @@
 # labels not listed here are preserved; nothing is ever deleted. Repos with
 # archived=true are skipped. Topics are logged only unless TOPICS is provided
 # to the script (the org has no topic standard yet).
+#
+# Community files: the script distributes the canonical files from
+# org-community/ (SECURITY.md, CODE_OF_CONDUCT.md, CONTRIBUTING.md,
+# AI_POLICY.md, CODEOWNERS) to .github/<name> in every non-archived repo.
+# Semantics: add/update-only -- files are created when missing and updated
+# when they drift; nothing is ever deleted. Per-repo CODEOWNERS overrides
+# are respected and never overwritten by sync.
 
 settings:
   allow_squash_merge: true

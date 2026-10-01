@@ -62,6 +62,66 @@ LABELS_JSON='[
   {"name": "infrastructure",   "color": "0e8a16", "description": "Org infrastructure and automation"}
 ]'
 
+# Canonical org community files distributed to .github/<name> in every
+# non-archived repo. Add/update-only: created when missing, updated when
+# drifted. CODEOWNERS is never overwritten (per-repo overrides are
+# respected). Nothing is ever deleted.
+COMMUNITY_FILES=(SECURITY.md CODE_OF_CONDUCT.md CONTRIBUTING.md AI_POLICY.md CODEOWNERS)
+COMMUNITY_DIR="${BASH_SOURCE[0]%/*}/../org-community"
+
+# Apply one community file to a single repo. Returns non-zero on failure;
+# the caller counts failures and continues. Never deletes any file.
+apply_community_file() {
+  local repo="$1"
+  local name="$2"
+  local path=".github/${name}"
+  local canonical err
+  canonical="$(base64 -w0 <"${COMMUNITY_DIR}/${name}")"
+  local get_out
+  if ! get_out="$(gh api "/repos/${ORG}/${repo}/contents/${path}" 2>&1)"; then
+    if grep -q 'HTTP 404' <<<"${get_out}"; then
+      # Missing: PUT the canonical content on the repo's default branch.
+      local put_err
+      if ! put_err="$(jq -n --arg m "chore: sync org community file ${name}" --arg c "${canonical}" \
+        '{message: $m, content: $c, branch: "main"}' |
+        gh api --method PUT "/repos/${ORG}/${repo}/contents/${path}" \
+          --header "Content-Type: application/json" --input - 2>&1 >/dev/null)"; then
+        echo "FAILED: community file ${name} for ${repo}: ${put_err}"
+        return 1
+      fi
+      echo "created .github/${name}"
+      echo "- ${repo}: created \`.github/${name}\`" >>"${_COMMUNITY_SUMMARY}"
+    else
+      echo "FAILED: community file ${name} for ${repo}: ${get_out}"
+      return 1
+    fi
+  else
+    # Compare canonical content against the existing file. The API returns
+    # the content base64-encoded, possibly newline-wrapped, so strip
+    # newlines before decoding.
+    local existing
+    existing="$(jq -r '.content' <<<"${get_out}" | tr -d '\n' | base64 -d | base64 -w0)"
+    if [[ "${existing}" == "${canonical}" ]]; then
+      echo "skipped .github/${name} (up to date)"
+    elif [[ "${name}" == "CODEOWNERS" ]]; then
+      echo "skipped .github/${name} (per-repo override, not overwritten)"
+      echo "- ${repo}: skipped \`.github/${name}\` (per-repo override)" >>"${_COMMUNITY_SUMMARY}"
+    else
+      local sha put_err
+      sha="$(jq -r '.sha' <<<"${get_out}")"
+      if ! put_err="$(jq -n --arg m "chore: sync org community file ${name}" --arg c "${canonical}" --arg s "${sha}" \
+        '{message: $m, content: $c, sha: $s, branch: "main"}' |
+        gh api --method PUT "/repos/${ORG}/${repo}/contents/${path}" \
+          --header "Content-Type: application/json" --input - 2>&1 >/dev/null)"; then
+        echo "FAILED: community file ${name} for ${repo}: ${put_err}"
+        return 1
+      fi
+      echo "updated .github/${name}"
+      echo "- ${repo}: updated \`.github/${name}\`" >>"${_COMMUNITY_SUMMARY}"
+    fi
+  fi
+}
+
 # List non-archived repo names for the org.
 list_repos() {
   gh api --paginate "/orgs/${ORG}/repos?per_page=100" --jq '.[] | select(.archived == false) | .name'
@@ -75,6 +135,14 @@ if [[ "${DRY_RUN}" == "true" ]]; then
   echo "delete branch on merge, wiki/projects/discussions off."
   echo "--- desired labels ---"
   echo "${LABELS_JSON}" | jq -r '.[] | "\(.name) #\(.color) \(.description)"'
+  echo "--- community files (org-community/ -> .github/<name>) ---"
+  for cf in "${COMMUNITY_FILES[@]}"; do
+    if [[ "${cf}" == "CODEOWNERS" ]]; then
+      echo "${cf}: create if missing; update on drift; per-repo overrides never overwritten"
+    else
+      echo "${cf}: create if missing; update on drift"
+    fi
+  done
   if [[ -n "${TOPICS:-}" ]]; then
     echo "--- desired topics ---"
     echo "${TOPICS}"
@@ -85,6 +153,13 @@ if [[ "${DRY_RUN}" == "true" ]]; then
 fi
 
 FAILED=0
+
+# Step-summary file for the community files sync section; created once.
+_COMMUNITY_SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
+{
+  echo "### Community files sync"
+  echo
+} >>"${_COMMUNITY_SUMMARY}"
 
 # Apply settings, labels, and topics to a single repo. Prints the repo name
 # and returns non-zero on failure; the caller counts failures and continues.
@@ -140,6 +215,14 @@ apply_repo() {
       --input - <<<"{\"names\": $(printf '%s' "${merged}" | jq -R 'split(",")')}" >/dev/null
     echo "topics updated: ${merged}"
   fi
+
+  # Community files: distribute org-community/ to .github/<name>.
+  local cf
+  for cf in "${COMMUNITY_FILES[@]}"; do
+    if ! apply_community_file "${repo}" "${cf}"; then
+      return 1
+    fi
+  done
 }
 
 for repo in $(list_repos); do
@@ -150,6 +233,7 @@ done
 
 if [[ "${FAILED}" -gt 0 ]]; then
   echo "Done with ${FAILED} failed repo(s)."
+  echo "Failed repo(s): ${FAILED}" >>"${_COMMUNITY_SUMMARY}"
   exit 1
 fi
 
