@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Mint GitHub App token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0 # zizmor: ignore[github-app] scoped via permission-organization-administration, permission-administration, and permission-issues inputs; repo settings updates need repo administration write, label sync needs issues write
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0 # zizmor: ignore[github-app] scoped via permission-organization-administration, permission-administration, permission-issues, and permission-contents inputs; repo settings updates need repo administration write, label sync needs issues write, community file sync needs contents write
         id: app-token
         with:
           client-id: ${{ vars.ORG_APP_CLIENT_ID }}
@@ -52,6 +52,7 @@ jobs:
           permission-organization-administration: write
           permission-administration: write
           permission-issues: write
+          permission-contents: write
 
       - name: Apply org settings
         env:
