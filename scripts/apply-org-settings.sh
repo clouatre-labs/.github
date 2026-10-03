@@ -62,10 +62,16 @@ LABELS_JSON='[
   {"name": "infrastructure",   "color": "0e8a16", "description": "Org infrastructure and automation"}
 ]'
 
-# Canonical org community files distributed to .github/<name> in every
-# non-archived repo. Add/update-only: created when missing, updated when
-# drifted. CODEOWNERS is never overwritten (per-repo overrides are
-# respected). Nothing is ever deleted.
+# Canonical org community files. Root-level files are created in
+# non-archived repos when missing (root is the most visible supported
+# location and is what repos already use); existing root files are
+# per-repo overrides and never overwritten. Legacy .github/<name> copies
+# are migrated to root or deleted: GitHub gives .github/ precedence over
+# root, so a leftover copy shadows the repo's own document. Repos without
+# their own file inherit the org defaults from the clouatre-labs/.github
+# repository. CODEOWNERS is not an inheritable default: it is kept in
+# .github/CODEOWNERS per repo, create-if-missing, never overwritten.
+# Nothing is ever deleted except shadowing .github/ copies.
 COMMUNITY_FILES=(SECURITY.md CODE_OF_CONDUCT.md CONTRIBUTING.md AI_POLICY.md CODEOWNERS)
 COMMUNITY_DIR="${BASH_SOURCE[0]%/*}/../org-community"
 
@@ -79,54 +85,90 @@ COMMUNITY_DIR="${BASH_SOURCE[0]%/*}/../org-community"
 
 # Classify one community file for a repo. Sets globals: FILE_CLASS
 # (missing | drift | current | override) and FILE_SHA (for drift).
+# Classify one community file for a repo. Root-level files are per-repo
+# overrides and never overwritten. Legacy .github/<name> copies are
+# migrated to root (GitHub gives .github/ precedence over root, so a
+# leftover copy would shadow the repo's own root-level document).
+# Sets globals: FILE_CLASS
+#   missing  : no root file and no .github/ copy -> create at root
+#   migrate  : .github/ copy exists, no root file -> create at root, delete copy
+#   cleanup  : root file and .github/ copy both exist -> delete copy
+#   override : root file exists, no copy -> nothing to do
+# FILE_PATH is the path acted on; FILE_SHA the existing blob sha when needed.
 classify_community_file() {
   local repo="$1"
   local name="$2"
-  local path=".github/${name}"
-  local canonical err
-  canonical="$(base64 -w0 <"${COMMUNITY_DIR}/${name}")"
-  local get_out
-  if ! get_out="$(gh api "/repos/${ORG}/${repo}/contents/${path}" 2>&1)"; then
-    if grep -q 'HTTP 404' <<<"${get_out}"; then
+  local root_get copy_get
+  root_get="$(gh api "/repos/${ORG}/${repo}/contents/${name}" 2>&1)" \
+    && FILE_SHA="$(jq -r '.sha' <<<"${root_get}")" \
+    || FILE_SHA=""
+  if grep -q 'HTTP 404' <<<"${root_get}"; then
+    FILE_SHA=""
+    copy_get="$(gh api "/repos/${ORG}/${repo}/contents/.github/${name}" 2>&1)"
+    if grep -q 'HTTP 404' <<<"${copy_get}"; then
       FILE_CLASS="missing"
-      FILE_SHA=""
     else
-      echo "FAILED: community file ${name} for ${repo}: ${get_out}"
-      return 1
+      FILE_CLASS="migrate"
+      FILE_SHA="$(jq -r '.sha' <<<"${copy_get}")"
     fi
   else
-    # The API returns the content base64-encoded, possibly newline-wrapped,
-    # so strip newlines before decoding.
-    local existing
-    existing="$(jq -r '.content' <<<"${get_out}" | tr -d '\n' | base64 -d | base64 -w0)"
-    FILE_SHA="$(jq -r '.sha' <<<"${get_out}")"
-    if [[ "${existing}" == "${canonical}" ]]; then
-      FILE_CLASS="current"
-    elif [[ "${name}" == "CODEOWNERS" ]]; then
+    copy_get="$(gh api "/repos/${ORG}/${repo}/contents/.github/${name}" 2>&1)"
+    if grep -q 'HTTP 404' <<<"${copy_get}"; then
       FILE_CLASS="override"
     else
-      FILE_CLASS="drift"
+      FILE_CLASS="cleanup"
+      FILE_SHA="$(jq -r '.sha' <<<"${copy_get}")"
     fi
   fi
   return 0
 }
 
-# Commit one community file to the sync branch. Requires SYNC_BRANCH to
-# exist. Never deletes any file.
-commit_community_file() {
+# Delete one legacy .github/<name> copy on the sync branch. Requires
+# SYNC_BRANCH and FILE_SHA to be set to the copy's blob sha.
+delete_github_copy() {
   local repo="$1"
   local name="$2"
-  local path=".github/${name}"
-  local canonical sha payload put_err
+  local payload put_err
+  payload="$(jq -n --arg m "chore: remove shadowing .github/${name} copy" --arg s "${FILE_SHA}" --arg b "${SYNC_BRANCH}" \
+    '{message: $m, sha: $s, branch: $b}')"
+  if ! put_err="$(gh api --method DELETE "/repos/${ORG}/${repo}/contents/.github/${name}" \
+      --header "Content-Type: application/json" --input - <<<"${payload}" 2>&1 >/dev/null)"; then
+    echo "FAILED: delete .github/${name} for ${repo}: ${put_err}"
+    return 1
+  fi
+  return 0
+}
+
+# Commit the canonical community file to the repo root on the sync branch.
+# Requires SYNC_BRANCH. For the migrate class the .github/ copy is deleted
+# in the same branch afterwards by the caller. Never deletes root files.
+commit_root_file() {
+  local repo="$1"
+  local name="$2"
+  local canonical payload put_err
   canonical="$(base64 -w0 <"${COMMUNITY_DIR}/${name}")"
-  # The sha is empty when the file does not exist on the branch (create);
-  # otherwise it identifies the blob to replace (update).
-  sha="$(gh api "/repos/${ORG}/${repo}/contents/${path}?ref=${SYNC_BRANCH}" --jq '.sha' 2>/dev/null || true)"
-  payload="$(jq -n --arg m "chore: sync org community file ${name}" --arg c "${canonical}" --arg b "${SYNC_BRANCH}" --arg s "${sha}" \
-    '{message: $m, content: $c, branch: $b} + (if $s == "" then {} else {sha: $s} end)')"
-  if ! put_err="$(gh api --method PUT "/repos/${ORG}/${repo}/contents/${path}" \
+  payload="$(jq -n --arg m "chore: add org community file ${name} at repository root" --arg c "${canonical}" --arg b "${SYNC_BRANCH}" \
+    '{message: $m, content: $c, branch: $b}')"
+  if ! put_err="$(gh api --method PUT "/repos/${ORG}/${repo}/contents/${name}" \
       --header "Content-Type: application/json" --input - <<<"${payload}" 2>&1 >/dev/null)"; then
     echo "FAILED: community file ${name} for ${repo}: ${put_err}"
+    return 1
+  fi
+  return 0
+}
+
+# Create .github/CODEOWNERS from the canonical template on the sync branch.
+# Only called for the missing class; never overwrites an existing file.
+commit_github_codeowners() {
+  local repo="$1"
+  local name="$2"
+  local canonical payload put_err
+  canonical="$(base64 -w0 <"${COMMUNITY_DIR}/${name}")"
+  payload="$(jq -n --arg m "chore: add org CODEOWNERS" --arg c "${canonical}" --arg b "${SYNC_BRANCH}" \
+    '{message: $m, content: $c, branch: $b}')"
+  if ! put_err="$(gh api --method PUT "/repos/${ORG}/${repo}/contents/.github/${name}" \
+      --header "Content-Type: application/json" --input - <<<"${payload}" 2>&1 >/dev/null)"; then
+    echo "FAILED: .github/${name} for ${repo}: ${put_err}"
     return 1
   fi
   return 0
@@ -153,37 +195,54 @@ merge_pr() {
   return 1
 }
 
-# Sync all community files for one repo via branch + PR + squash-merge
-# (homebrew-tap pattern). Returns non-zero on failure; the caller counts
-# failures and continues. Never deletes any file.
+# Sync community files for one repo via branch + PR + squash-merge
+# (homebrew-tap pattern). Root-level org files are created when missing;
+# existing root files are per-repo overrides and never overwritten; legacy
+# .github/<name> copies are migrated to root or deleted when they would
+# shadow a root file. Returns non-zero on failure; the caller counts
+# failures and continues.
 sync_community_files() {
   local repo="$1"
-  local changed_files=()
-  local changed_actions=()
-  local name
+  local actions=()
+  local name cls
   for name in "${COMMUNITY_FILES[@]}"; do
     classify_community_file "${repo}" "${name}" || return 1
-    case "${FILE_CLASS}" in
-      current)
-        echo "skipped .github/${name} (up to date)"
+    cls="${FILE_CLASS}"
+    case "${name}" in
+      CODEOWNERS)
+        # CODEOWNERS is not an inheritable default health file: keep the
+        # legacy per-repo behavior (create-if-missing in .github/, never
+        # overwrite).
+        if [[ "${cls}" == "cleanup" || "${cls}" == "migrate" ]]; then
+          echo "skipped .github/${name} (per-repo override, not overwritten)"
+          echo "- ${repo}: skipped \`.github/${name}\` (per-repo override)" >>"${_COMMUNITY_SUMMARY}"
+        elif [[ "${cls}" == "missing" ]]; then
+          actions+=("create-github:${name}")
+        else
+          echo "skipped ${name} (already present)"
+        fi
+        continue
         ;;
+    esac
+    case "${cls}" in
       override)
-        echo "skipped .github/${name} (per-repo override, not overwritten)"
-        echo "- ${repo}: skipped \`.github/${name}\` (per-repo override)" >>"${_COMMUNITY_SUMMARY}"
+        echo "skipped ${name} (per-repo root override, not overwritten)"
         ;;
       missing)
-        echo "pending .github/${name} (missing on main)"
-        changed_files+=("${name}")
-        changed_actions+=("created")
+        echo "pending ${name} (missing at root)"
+        actions+=("create:${name}")
         ;;
-      drift)
-        echo "pending .github/${name} (drifted from canonical)"
-        changed_files+=("${name}")
-        changed_actions+=("updated")
+      migrate)
+        echo "pending ${name} (migrating .github/${name} to root)"
+        actions+=("migrate:${name}")
+        ;;
+      cleanup)
+        echo "pending ${name} (removing .github/${name} shadowing root file)"
+        actions+=("cleanup:${name}")
         ;;
     esac
   done
-  if [[ "${#changed_files[@]}" -eq 0 ]]; then
+  if [[ "${#actions[@]}" -eq 0 ]]; then
     return 0
   fi
 
@@ -200,12 +259,31 @@ sync_community_files() {
   fi
   SYNC_BRANCH="${sync_branch}"
 
-  local i
-  for i in "${!changed_files[@]}"; do
-    if ! commit_community_file "${repo}" "${changed_files[${i}]}"; then
-      return 1
-    fi
-    echo "${changed_actions[${i}]} .github/${changed_files[${i}]} on ${sync_branch}"
+  local action op file
+  for action in "${actions[@]}"; do
+    op="${action%%:*}"
+    file="${action#*:}"
+    case "${op}" in
+      create)
+        commit_root_file "${repo}" "${file}" || return 1
+        echo "created ${file} at repository root on ${sync_branch}"
+        ;;
+      create-github)
+        FILE_SHA=""
+        commit_github_codeowners "${repo}" "${file}" || return 1
+        echo "created .github/${file} on ${sync_branch}"
+        ;;
+      migrate)
+        commit_root_file "${repo}" "${file}" || return 1
+        classify_community_file "${repo}" "${file}" || return 1
+        delete_github_copy "${repo}" "${file}" || return 1
+        echo "migrated ${file} from .github/ to repository root on ${sync_branch}"
+        ;;
+      cleanup)
+        delete_github_copy "${repo}" "${file}" || return 1
+        echo "removed .github/${file} (shadowed root file) on ${sync_branch}"
+        ;;
+    esac
   done
 
   # Open the PR (reuse an open PR from a previous partially failed run).
@@ -216,7 +294,7 @@ sync_community_files() {
   else
     if ! pr_number="$(gh api --method POST "/repos/${ORG}/${repo}/pulls" \
         --header "Content-Type: application/json" \
-        --input - <<<"$(jq -n --arg h "${sync_branch}" '{title: "chore: sync org community files", head: $h, base: "main", body: "Syncs org community files to the canonical versions in clouatre-labs/.github (org-community/). Automated pull request; safe to merge."}')" \
+        --input - <<<"$(jq -n --arg h "${sync_branch}" '{title: "chore: sync org community files", head: $h, base: "main", body: "Places org community files at the repository root and removes shadowing .github/ copies. Canonical defaults live in clouatre-labs/.github. Automated pull request; safe to merge."}')" \
         --jq '.number' 2>&1)"; then
       echo "FAILED: open PR for ${repo}: ${pr_number}"
       return 1
@@ -226,12 +304,9 @@ sync_community_files() {
   if ! merge_pr "${repo}" "${pr_number}"; then
     return 1
   fi
-  for i in "${!changed_files[@]}"; do
-    echo "- ${repo}: ${changed_actions[${i}]} \`.github/${changed_files[${i}]}\` via PR" >>"${_COMMUNITY_SUMMARY}"
-  done
+  echo "- ${repo}: community files synced via PR" >>"${_COMMUNITY_SUMMARY}"
   return 0
 }
-
 
 # List non-archived repo names for the org.
 list_repos() {
@@ -249,9 +324,9 @@ if [[ "${DRY_RUN}" == "true" ]]; then
   echo "--- community files (org-community/ -> .github/<name>) ---"
   for cf in "${COMMUNITY_FILES[@]}"; do
     if [[ "${cf}" == "CODEOWNERS" ]]; then
-      echo "${cf}: create if missing; update on drift; per-repo overrides never overwritten; changes land via PR"
+      echo "${cf}: create if missing in .github/; per-repo overrides never overwritten; changes land via PR"
     else
-      echo "${cf}: create if missing; update on drift; changes land via PR"
+      echo "${cf}: create if missing at repository root; per-repo overrides never overwritten; shadowing .github/ copies migrated or removed; changes land via PR"
     fi
   done
   if [[ -n "${TOPICS:-}" ]]; then
