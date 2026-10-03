@@ -22,5 +22,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          gh api /app --jq '{slug, id, name}'
-          echo "installation id: $(gh api /app/installations --jq '.[0].id' 2>/dev/null || echo 'n/a')"
+          echo "app id: ${{ steps.app-token.outputs.app-id }}"
+          echo "app slug: ${{ steps.app-token.outputs.app-slug }}"
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          gh api /installation --jq '{app_slug, app_id, id}'
