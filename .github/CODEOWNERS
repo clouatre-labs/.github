@@ -4,3 +4,6 @@
 *       @clouatre-labs/maintainers
 .github/workflows/ @clouatre-labs/security-reviewers
 /zizmor.yml @clouatre-labs/security-reviewers
+/safe-settings/ @clouatre-labs/security-reviewers
+/scripts/ @clouatre-labs/security-reviewers
+/org-community/ @clouatre-labs/security-reviewers
