@@ -69,9 +69,17 @@ LABELS_JSON='[
 COMMUNITY_FILES=(SECURITY.md CODE_OF_CONDUCT.md CONTRIBUTING.md AI_POLICY.md CODEOWNERS)
 COMMUNITY_DIR="${BASH_SOURCE[0]%/*}/../org-community"
 
-# Apply one community file to a single repo. Returns non-zero on failure;
-# the caller counts failures and continues. Never deletes any file.
-apply_community_file() {
+# Community files sync: PR-based (homebrew-tap pattern). Repo-level main
+# branch rulesets block direct pushes to main, even for Integration tokens.
+# Instead: create a branch with the app token, commit each drifted file,
+# open one PR per repo, and squash-merge it as the app. The org settings
+# app (Integration 2978188, clouatre-labs-org-admin) is a bypass-always
+# actor on every repo main-branch ruleset, so its merge is not blocked by
+# pull_request or required_status_checks rules.
+
+# Classify one community file for a repo. Sets globals: FILE_CLASS
+# (missing | drift | current | override) and FILE_SHA (for drift).
+classify_community_file() {
   local repo="$1"
   local name="$2"
   local path=".github/${name}"
@@ -80,47 +88,150 @@ apply_community_file() {
   local get_out
   if ! get_out="$(gh api "/repos/${ORG}/${repo}/contents/${path}" 2>&1)"; then
     if grep -q 'HTTP 404' <<<"${get_out}"; then
-      # Missing: PUT the canonical content on the repo's default branch.
-      local put_err
-      if ! put_err="$(jq -n --arg m "chore: sync org community file ${name}" --arg c "${canonical}" \
-        '{message: $m, content: $c, branch: "main"}' |
-        gh api --method PUT "/repos/${ORG}/${repo}/contents/${path}" \
-          --header "Content-Type: application/json" --input - 2>&1 >/dev/null)"; then
-        echo "FAILED: community file ${name} for ${repo}: ${put_err}"
-        return 1
-      fi
-      echo "created .github/${name}"
-      echo "- ${repo}: created \`.github/${name}\`" >>"${_COMMUNITY_SUMMARY}"
+      FILE_CLASS="missing"
+      FILE_SHA=""
     else
       echo "FAILED: community file ${name} for ${repo}: ${get_out}"
       return 1
     fi
   else
-    # Compare canonical content against the existing file. The API returns
-    # the content base64-encoded, possibly newline-wrapped, so strip
-    # newlines before decoding.
+    # The API returns the content base64-encoded, possibly newline-wrapped,
+    # so strip newlines before decoding.
     local existing
     existing="$(jq -r '.content' <<<"${get_out}" | tr -d '\n' | base64 -d | base64 -w0)"
+    FILE_SHA="$(jq -r '.sha' <<<"${get_out}")"
     if [[ "${existing}" == "${canonical}" ]]; then
-      echo "skipped .github/${name} (up to date)"
+      FILE_CLASS="current"
     elif [[ "${name}" == "CODEOWNERS" ]]; then
-      echo "skipped .github/${name} (per-repo override, not overwritten)"
-      echo "- ${repo}: skipped \`.github/${name}\` (per-repo override)" >>"${_COMMUNITY_SUMMARY}"
+      FILE_CLASS="override"
     else
-      local sha put_err
-      sha="$(jq -r '.sha' <<<"${get_out}")"
-      if ! put_err="$(jq -n --arg m "chore: sync org community file ${name}" --arg c "${canonical}" --arg s "${sha}" \
-        '{message: $m, content: $c, sha: $s, branch: "main"}' |
-        gh api --method PUT "/repos/${ORG}/${repo}/contents/${path}" \
-          --header "Content-Type: application/json" --input - 2>&1 >/dev/null)"; then
-        echo "FAILED: community file ${name} for ${repo}: ${put_err}"
-        return 1
-      fi
-      echo "updated .github/${name}"
-      echo "- ${repo}: updated \`.github/${name}\`" >>"${_COMMUNITY_SUMMARY}"
+      FILE_CLASS="drift"
     fi
   fi
+  return 0
 }
+
+# Commit one community file to the sync branch. Requires SYNC_BRANCH to
+# exist. Never deletes any file.
+commit_community_file() {
+  local repo="$1"
+  local name="$2"
+  local path=".github/${name}"
+  local canonical sha payload put_err
+  canonical="$(base64 -w0 <"${COMMUNITY_DIR}/${name}")"
+  # The sha is empty when the file does not exist on the branch (create);
+  # otherwise it identifies the blob to replace (update).
+  sha="$(gh api "/repos/${ORG}/${repo}/contents/${path}?ref=${SYNC_BRANCH}" --jq '.sha' 2>/dev/null || true)"
+  payload="$(jq -n --arg m "chore: sync org community file ${name}" --arg c "${canonical}" --arg b "${SYNC_BRANCH}" --arg s "${sha}" \
+    '{message: $m, content: $c, branch: $b} + (if $s == "" then {} else {sha: $s} end)')"
+  if ! put_err="$(gh api --method PUT "/repos/${ORG}/${repo}/contents/${path}" \
+      --header "Content-Type: application/json" --input - <<<"${payload}" 2>&1 >/dev/null)"; then
+    echo "FAILED: community file ${name} for ${repo}: ${put_err}"
+    return 1
+  fi
+  return 0
+}
+
+# Merge a PR as the app, retrying briefly while checks settle. The app is a
+# bypass-always actor on repo main-branch rulesets, so the merge is expected
+# to succeed on the first attempt; retries only cover transient races.
+merge_pr() {
+  local repo="$1"
+  local pr_number="$2"
+  local attempt merge_err
+  for attempt in 1 2 3; do
+    if ! merge_err="$(gh api --method PUT "/repos/${ORG}/${repo}/pulls/${pr_number}/merge" \
+        --header "Content-Type: application/json" \
+        --input - <<< '{"merge_method": "squash"}' 2>&1 >/dev/null)"; then
+      echo "merge attempt ${attempt} for PR ${pr_number} in ${repo} failed: ${merge_err}"
+      sleep 20
+    else
+      return 0
+    fi
+  done
+  echo "FAILED: merge PR ${pr_number} for ${repo}: ${merge_err}"
+  return 1
+}
+
+# Sync all community files for one repo via branch + PR + squash-merge
+# (homebrew-tap pattern). Returns non-zero on failure; the caller counts
+# failures and continues. Never deletes any file.
+sync_community_files() {
+  local repo="$1"
+  local changed_files=()
+  local changed_actions=()
+  local name
+  for name in "${COMMUNITY_FILES[@]}"; do
+    classify_community_file "${repo}" "${name}" || return 1
+    case "${FILE_CLASS}" in
+      current)
+        echo "skipped .github/${name} (up to date)"
+        ;;
+      override)
+        echo "skipped .github/${name} (per-repo override, not overwritten)"
+        echo "- ${repo}: skipped \`.github/${name}\` (per-repo override)" >>"${_COMMUNITY_SUMMARY}"
+        ;;
+      missing)
+        echo "pending .github/${name} (missing on main)"
+        changed_files+=("${name}")
+        changed_actions+=("created")
+        ;;
+      drift)
+        echo "pending .github/${name} (drifted from canonical)"
+        changed_files+=("${name}")
+        changed_actions+=("updated")
+        ;;
+    esac
+  done
+  if [[ "${#changed_files[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  # Fresh sync branch from main; drop any stale branch from a previous run.
+  local sync_branch base_sha
+  sync_branch="chore/sync-org-community-files"
+  base_sha="$(gh api "/repos/${ORG}/${repo}/git/ref/heads/main" --jq '.object.sha')"
+  gh api --method DELETE "/repos/${ORG}/${repo}/git/refs/heads/${sync_branch}" >/dev/null 2>&1 || true
+  if ! gh api --method POST "/repos/${ORG}/${repo}/git/refs" \
+      --header "Content-Type: application/json" \
+      --input - <<<"{\"ref\": \"refs/heads/${sync_branch}\", \"sha\": \"${base_sha}\"}" >/dev/null; then
+    echo "FAILED: branch ${sync_branch} for ${repo}"
+    return 1
+  fi
+  SYNC_BRANCH="${sync_branch}"
+
+  local i
+  for i in "${!changed_files[@]}"; do
+    if ! commit_community_file "${repo}" "${changed_files[${i}]}"; then
+      return 1
+    fi
+    echo "${changed_actions[${i}]} .github/${changed_files[${i}]} on ${sync_branch}"
+  done
+
+  # Open the PR (reuse an open PR from a previous partially failed run).
+  local pr_number pr_out
+  pr_out="$(gh api "/repos/${ORG}/${repo}/pulls?head=${ORG}:${sync_branch}&state=open&base=main" --jq '.[0].number' 2>/dev/null || true)"
+  if [[ -n "${pr_out}" && "${pr_out}" != "null" ]]; then
+    pr_number="${pr_out}"
+  else
+    if ! pr_number="$(gh api --method POST "/repos/${ORG}/${repo}/pulls" \
+        --header "Content-Type: application/json" \
+        --input - <<<"$(jq -n --arg h "${sync_branch}" '{title: "chore: sync org community files", head: $h, base: "main", body: "Syncs org community files to the canonical versions in clouatre-labs/.github (org-community/). Automated pull request; safe to merge."}')" \
+        --jq '.number' 2>&1)"; then
+      echo "FAILED: open PR for ${repo}: ${pr_number}"
+      return 1
+    fi
+  fi
+
+  if ! merge_pr "${repo}" "${pr_number}"; then
+    return 1
+  fi
+  for i in "${!changed_files[@]}"; do
+    echo "- ${repo}: ${changed_actions[${i}]} \`.github/${changed_files[${i}]}\` via PR" >>"${_COMMUNITY_SUMMARY}"
+  done
+  return 0
+}
+
 
 # List non-archived repo names for the org.
 list_repos() {
@@ -138,9 +249,9 @@ if [[ "${DRY_RUN}" == "true" ]]; then
   echo "--- community files (org-community/ -> .github/<name>) ---"
   for cf in "${COMMUNITY_FILES[@]}"; do
     if [[ "${cf}" == "CODEOWNERS" ]]; then
-      echo "${cf}: create if missing; update on drift; per-repo overrides never overwritten"
+      echo "${cf}: create if missing; update on drift; per-repo overrides never overwritten; changes land via PR"
     else
-      echo "${cf}: create if missing; update on drift"
+      echo "${cf}: create if missing; update on drift; changes land via PR"
     fi
   done
   if [[ -n "${TOPICS:-}" ]]; then
@@ -216,13 +327,9 @@ apply_repo() {
     echo "topics updated: ${merged}"
   fi
 
-  # Community files: distribute org-community/ to .github/<name>.
-  local cf
-  for cf in "${COMMUNITY_FILES[@]}"; do
-    if ! apply_community_file "${repo}" "${cf}"; then
-      return 1
-    fi
-  done
+  # Community files: distribute org-community/ to .github/<name> via
+  # branch + PR + squash-merge (repo rulesets block direct pushes to main).
+  sync_community_files "${repo}"
 }
 
 for repo in $(list_repos); do
