@@ -280,6 +280,10 @@ sync_community_files() {
         echo "migrated ${file} from .github/ to repository root on ${sync_branch}"
         ;;
       cleanup)
+        # Re-classify to refresh FILE_SHA: it is a global overwritten by
+        # each classification, and earlier actions in this loop may have
+        # changed it since the classification pass.
+        classify_community_file "${repo}" "${file}" || return 1
         delete_github_copy "${repo}" "${file}" || return 1
         echo "removed .github/${file} (shadowed root file) on ${sync_branch}"
         ;;
