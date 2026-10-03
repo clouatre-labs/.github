@@ -1,0 +1,26 @@
+name: Identify Org App
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  identify:
+    runs-on: ubuntu-26.04-arm
+    environment: org-app
+    steps:
+      - name: Mint GitHub App token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0 # zizmor: ignore[github-app] org-app env-gated secrets
+        id: app-token
+        with:
+          client-id: ${{ vars.ORG_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ORG_APP_PRIVATE_KEY }}
+          owner: clouatre-labs
+
+      - name: Identify authenticated app
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh api /app --jq '{slug, id, name}'
+          echo "installation id: $(gh api /app/installations --jq '.[0].id' 2>/dev/null || echo 'n/a')"
