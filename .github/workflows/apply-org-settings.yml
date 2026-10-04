@@ -58,6 +58,7 @@ jobs:
       - name: Apply org settings
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          DRY_RUN: ${{ inputs.dry_run == true }}
         run: |
           chmod +x scripts/apply-org-settings.sh
-          scripts/apply-org-settings.sh "${{ inputs.dry_run == true && 'true' || 'false' }}"
+          scripts/apply-org-settings.sh "$DRY_RUN"

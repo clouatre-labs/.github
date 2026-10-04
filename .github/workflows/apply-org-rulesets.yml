@@ -11,6 +11,10 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: apply-org-rulesets
+  cancel-in-progress: false
+
 jobs:
   zizmor:
     name: zizmor

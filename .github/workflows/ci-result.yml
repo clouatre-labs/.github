@@ -8,6 +8,10 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: ci-result
+  cancel-in-progress: false
+
 jobs:
   ci-result:
     name: CI Result
