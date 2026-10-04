@@ -36,7 +36,34 @@ jobs:
           annotations: true
           min-severity: high
 
+  # Audit job: read-only drift report. Runs on the schedule and on manual
+  # dispatch with dry_run=true. No environment, so org-app secrets are not
+  # available and the run cannot mutate anything (audit MED-4).
+  audit:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.dry_run == true)
+    runs-on: ubuntu-26.04-arm
+    permissions:
+      contents: read
+    concurrency:
+      group: apply-org-settings-audit
+      cancel-in-progress: true
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Audit org settings (dry run)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: 'true'
+        run: |
+          chmod +x scripts/apply-org-settings.sh
+          scripts/apply-org-settings.sh "$DRY_RUN"
+
+  # Apply job: privileged. Runs on push to main and on manual dispatch with
+  # dry_run=false. Uses the org-app environment, which requires review by the
+  # @clouatre-labs/security-reviewers team (reviewers added out-of-band).
   apply:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry_run != true)
     runs-on: ubuntu-26.04-arm
     environment: org-app
     steps:

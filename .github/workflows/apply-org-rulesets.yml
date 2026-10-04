@@ -31,6 +31,9 @@ jobs:
           annotations: true
           min-severity: high
 
+  # The org-app environment used by the apply job requires approval from the
+  # @clouatre-labs/security-reviewers team (required reviewers configured
+  # out-of-band on the environment); admins cannot bypass the gate.
   apply:
     runs-on: ubuntu-26.04-arm
     environment: org-app
