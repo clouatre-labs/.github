@@ -58,7 +58,7 @@ echo "Required status check: ${REQUIRED_CHECK}"
 MAIN_BRANCH_PAYLOAD='{
   "name": "Main Branch Protection",
   "target": "branch",
-  "enforcement": "evaluate",
+  "enforcement": "active",
   "bypass_actors": [
     {
       "actor_type": "OrganizationAdmin",
@@ -72,8 +72,8 @@ MAIN_BRANCH_PAYLOAD='{
     },
     {
       "actor_type": "Integration",
-      "actor_id": 1143301,
-      "bypass_mode": "exempt"
+      "actor_id": 2978188,
+      "bypass_mode": "always"
     }
   ],
   "conditions": {
@@ -175,6 +175,64 @@ if [[ -n "${EXISTING_ID}" ]]; then
 else
   echo "Creating ruleset '${RULESET_NAME}'..."
   echo "${RELEASE_TAG_PAYLOAD}" | gh api --method POST "/orgs/${ORG}/rulesets" \
+    --header "Content-Type: application/json" \
+    --input -
+  echo "Ruleset '${RULESET_NAME}' created."
+fi
+
+echo "Done."
+
+# ── Ruleset 3: Tag Immutability ────────────────────────────────────────────
+# Port of the unique rules from yamaska-rs "Tag immutability" (audit MED-3):
+# once a tag exists it cannot be deleted, updated, or re-pointed. Required
+# signatures are deliberately NOT ported org-wide to avoid forcing signed
+# tags on every repo.
+
+RULESET_NAME="Tag Immutability"
+EXISTING_ID="$(get_ruleset_id "${RULESET_NAME}")"
+
+TAG_IMMUTABILITY_PAYLOAD='{
+  "name": "Tag Immutability",
+  "target": "tag",
+  "enforcement": "active",
+  "bypass_actors": [
+    {
+      "actor_type": "OrganizationAdmin",
+      "actor_id": 1,
+      "bypass_mode": "always"
+    },
+    {
+      "actor_type": "RepositoryRole",
+      "actor_id": 5,
+      "bypass_mode": "always"
+    }
+  ],
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/tags/**"],
+      "exclude": []
+    },
+    "repository_name": {
+      "include": ["~ALL"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    { "type": "update" }
+  ]
+}'
+
+if [[ -n "${EXISTING_ID}" ]]; then
+  echo "Ruleset '${RULESET_NAME}' exists (id=${EXISTING_ID}). Patching..."
+  echo "${TAG_IMMUTABILITY_PAYLOAD}" | gh api --method PUT "/orgs/${ORG}/rulesets/${EXISTING_ID}" \
+    --header "Content-Type: application/json" \
+    --input -
+  echo "Ruleset '${RULESET_NAME}' patched."
+else
+  echo "Creating ruleset '${RULESET_NAME}'..."
+  echo "${TAG_IMMUTABILITY_PAYLOAD}" | gh api --method POST "/orgs/${ORG}/rulesets" \
     --header "Content-Type: application/json" \
     --input -
   echo "Ruleset '${RULESET_NAME}' created."
