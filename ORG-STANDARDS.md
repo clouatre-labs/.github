@@ -58,22 +58,26 @@ GitHub Actions concurrency and `cancel-in-progress` are per-workflow
 settings; GitHub offers no org-level enforcement. Repositories in this
 org follow one convention:
 
-- All PR-triggered workflows in a repo share a single concurrency group:
+- Each PR-triggered workflow keeps its OWN workflow-scoped concurrency
+  group with `cancel-in-progress: true`, so each workflow cancels its
+  own stale runs on a newer push:
 
   ```yaml
   concurrency:
-    group: ${{ github.repository }}-pr-${{ github.event.pull_request.number || github.ref_name }}
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
     cancel-in-progress: true
   ```
+
+- Do NOT share one concurrency group across workflows whose runs are
+  required checks. Concurrency permits only one run per group; when two
+  required workflows start simultaneously on the same group they cancel
+  each other and the required checks never report (validated in
+  clouatre-labs/clouatre.ca#1692).
 
 - Scheduled and deploy workflows use their own group with
   `cancel-in-progress: false`.
 
-Because all PR workflows share one group, a newer run of any workflow for
-the same PR cancels redundant in-flight runs of the others, instead of
-each workflow cancelling only itself. `merge_group` runs receive unique
-`gh-readonly-queue` ref names, so they do not collide with PR groups. The
-org standard runner for CI is `ubuntu-26.04-arm`.
+The org standard runner for CI is `ubuntu-26.04-arm`.
 
 ## Changing these standards
 
