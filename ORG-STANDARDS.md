@@ -71,8 +71,7 @@ org follow one convention:
 - Do NOT share one concurrency group across workflows whose runs are
   required checks. Concurrency permits only one run per group; when two
   required workflows start simultaneously on the same group they cancel
-  each other and the required checks never report (validated in
-  clouatre-labs/clouatre.ca#1692).
+  each other and the required checks never report.
 
 - Scheduled and deploy workflows use their own group with
   `cancel-in-progress: false`.
