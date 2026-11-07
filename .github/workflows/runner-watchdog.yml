@@ -1,0 +1,44 @@
+name: Runner Watchdog
+
+# Alerts when CI runs on the oci-arm self-hosted runner stall (queued > 20
+# minutes). A stalled runner has no native fallback: jobs queue indefinitely
+# until the runner returns (systemd auto-restarts it in minutes; OCI outages
+# need manual intervention). This workflow makes the stall visible instead of
+# silent. It runs on a GitHub-hosted runner so it works when the self-hosted
+# runner is dead. Scheduled workflows can themselves be delayed or dropped
+# under GitHub load (documented); treat this as best-effort signal, not SLA.
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 5
+    steps:
+      - name: Detect stalled runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cutoff=$(date -u -d '-20 minutes' +%s)
+          stalled=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" \
+            --paginate \
+            --jq '.workflow_runs[]
+                | select(.status == "queued" or .status == "pending")
+                | select((.created_at | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) < '"$cutoff"')
+                | select(.name != "Runner Watchdog")
+                | [.database_id, .name, .head_branch, .created_at] | @tsv')
+          if [ -n "$stalled" ]; then
+            echo "::error::Runs stalled (queued > 20 min) — self-hosted runner likely down:"
+            echo "$stalled"
+            echo "Recovery: check runner host (systemctl status actions.runner.*),"
+            echo "or push the branch to a NEW branch + new PR if dispatch is wedged."
+            exit 1
+          fi
+          echo "No stalled runs."
