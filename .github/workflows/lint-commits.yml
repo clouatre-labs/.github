@@ -1,0 +1,58 @@
+# Reusable commit-message lint job shared across the organization.
+# Callers keep their job named 'Lint Commits'; the effective check run
+# reports as '<caller job name> / Lint Commits'.
+name: Lint Commits
+
+on:
+  workflow_call:
+    inputs:
+      base-sha:
+        description: First commit SHA in range (exclusive)
+        required: true
+        type: string
+      head-sha:
+        description: Last commit SHA in range (inclusive)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  lint-commits:
+    name: Lint Commits
+    runs-on: [oci-arm]
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      # Cache the installed tree, not ~/.npm: restoring the npm cache still
+      # pays full install cost (24s cache download + 13-56s install measured
+      # on oci-arm). commitlint is pure JS and versions are pinned below, so
+      # an exact key can skip install entirely on hit.
+      - name: Cache commitlint
+        id: cache-commitlint
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules
+          key: commitlint-${{ runner.arch }}-21.2.1-21.2.0
+      - name: Install commitlint
+        # Exact key, no restore-keys: on miss, install fresh from the
+        # registry rather than grafting onto a tree from other versions.
+        if: steps.cache-commitlint.outputs.cache-hit != 'true'
+        run: |
+          npm install --no-save --no-audit --no-fund \
+            @commitlint/cli@21.2.1 \
+            @commitlint/config-conventional@21.2.0
+      - name: Validate commit messages
+        run: |
+          npx commitlint \
+            --from "${{ inputs.base-sha }}" \
+            --to "${{ inputs.head-sha }}" \
+            --verbose
