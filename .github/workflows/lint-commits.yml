@@ -14,6 +14,11 @@ on:
         description: Last commit SHA in range (inclusive)
         required: true
         type: string
+      label:
+        description: Runner label; org-level self-hosted runners do not serve public repos, so public callers pass a GitHub-hosted arm label
+        required: false
+        type: string
+        default: oci-arm
 
 permissions:
   contents: read
@@ -21,7 +26,7 @@ permissions:
 jobs:
   lint-commits:
     name: Lint Commits
-    runs-on: [oci-arm]
+    runs-on: ${{ inputs.label }}
     timeout-minutes: 5
     steps:
       - name: Checkout
