@@ -58,6 +58,11 @@ on:
         required: false
         type: string
         default: ""
+      markdown-extra-check:
+        description: Optional additional markdown check command run after markdownlint (e.g. prettier prose check)
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -151,6 +156,9 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@696eb3f2509270d7b882d2aa68347bc676e7af34 # v25.0.0
         with:
           globs: ${{ inputs.markdownlint-globs }}
+      - name: Extra markdown checks
+        if: inputs.markdown-extra-check != ''
+        run: ${{ inputs.markdown-extra-check }}
 
   security-result:
     name: Security Result
