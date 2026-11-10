@@ -126,6 +126,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Lint with markdownlint-cli2
+        # before any caller-supplied install, so node_modules markdown files
+        # pulled in by markdown-lint-install never leak into the lint globs
+        # (matches the original inline job ordering)
+        uses: DavidAnson/markdownlint-cli2-action@696eb3f2509270d7b882d2aa68347bc676e7af34 # v25.0.0
+        with:
+          globs: ${{ inputs.markdownlint-globs }}
       # npx/node are not on the hosted arm runner image; callers using
       # markdown-lint-install or markdown-extra-check almost always need Node.
       - name: Set up Node.js
@@ -136,10 +143,6 @@ jobs:
       - name: Install dependencies
         if: inputs.markdown-lint-install != ''
         run: ${{ inputs.markdown-lint-install }}
-      - name: Lint with markdownlint-cli2
-        uses: DavidAnson/markdownlint-cli2-action@696eb3f2509270d7b882d2aa68347bc676e7af34 # v25.0.0
-        with:
-          globs: ${{ inputs.markdownlint-globs }}
       - name: Extra markdown checks
         if: inputs.markdown-extra-check != ''
         run: ${{ inputs.markdown-extra-check }}
