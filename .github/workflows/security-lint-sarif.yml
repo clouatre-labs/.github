@@ -129,6 +129,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # npx/node are not on the hosted arm runner image; callers using
+      # markdown-lint-install or markdown-extra-check almost always need Node.
+      - name: Set up Node.js
+        if: inputs.markdown-lint-install != '' || inputs.markdown-extra-check != ''
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
       - name: Install dependencies
         if: inputs.markdown-lint-install != ''
         run: ${{ inputs.markdown-lint-install }}
