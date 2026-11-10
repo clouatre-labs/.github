@@ -1,4 +1,7 @@
-# Reusable security and lint jobs shared across the organization.
+# Reusable security and lint jobs shared across the organization (base
+# variant; zizmor runs read-only). Repos that upload zizmor findings as
+# SARIF code scanning results call security-lint-sarif.yml instead, so
+# callers never need to grant security-events: write they do not use.
 # Mirrors the lint-commits rollout pattern: callers pass a label when public
 # (org-level self-hosted runners do not serve public repos) and keep their
 # aggregate check named 'Security Result'; the effective check runs report as
@@ -43,11 +46,6 @@ on:
         required: false
         type: string
         default: ""
-      zizmor-advanced-security:
-        description: Upload zizmor findings as SARIF code scanning results (public repos or GHAS license)
-        required: false
-        type: boolean
-        default: false
       markdownlint-globs:
         description: Globs passed to markdownlint-cli2
         required: false
@@ -91,7 +89,7 @@ jobs:
   zizmor:
     name: Workflow SHA pinning
     runs-on: ${{ inputs.label }}
-    if: ${{ inputs.zizmor && !inputs.zizmor-advanced-security }}
+    if: ${{ inputs.zizmor }}
     timeout-minutes: 10
     permissions:
       contents: read
@@ -103,27 +101,6 @@ jobs:
         with:
           min-severity: ${{ inputs.zizmor-min-severity }}
           advanced-security: false
-          config: ${{ inputs.zizmor-config }}
-
-  # Separate job so permissions stay literal; only callers that opt into
-  # SARIF upload pay for security-events: write.
-  zizmor-sarif:
-    name: Workflow SHA pinning (SARIF)
-    runs-on: ${{ inputs.label }}
-    if: ${{ inputs.zizmor && inputs.zizmor-advanced-security }}
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      security-events: write # needed for SARIF upload
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Lint GitHub Actions workflows
-        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
-        with:
-          min-severity: ${{ inputs.zizmor-min-severity }}
-          advanced-security: true
-          token: ${{ secrets.GITHUB_TOKEN }}
           config: ${{ inputs.zizmor-config }}
 
   reuse:
@@ -163,14 +140,14 @@ jobs:
   security-result:
     name: Security Result
     runs-on: ${{ inputs.label }}
-    needs: [secrets, zizmor, zizmor-sarif, reuse, markdown-lint]
+    needs: [secrets, zizmor, reuse, markdown-lint]
     if: always()
     timeout-minutes: 5
     permissions: {}
     steps:
       - name: Check all security jobs passed
         run: |
-          for result in "${{ needs.secrets.result }}" "${{ needs.zizmor.result }}" "${{ needs.zizmor-sarif.result }}" "${{ needs.reuse.result }}" "${{ needs.markdown-lint.result }}"; do
+          for result in "${{ needs.secrets.result }}" "${{ needs.zizmor.result }}" "${{ needs.reuse.result }}" "${{ needs.markdown-lint.result }}"; do
             if [[ "$result" != "success" && "$result" != "skipped" ]]; then
               echo "Security check failed or cancelled: $result"
               exit 1
