@@ -52,6 +52,32 @@ that cannot sign commits are handled via squash merges by maintainers;
 see [CONTRIBUTING.md](CONTRIBUTING.md#commit-signing-and-merge-strategy)
 for the full workflow.
 
+## CI concurrency
+
+GitHub Actions concurrency and `cancel-in-progress` are per-workflow
+settings; GitHub offers no org-level enforcement. Repositories in this
+org follow one convention:
+
+- Each PR-triggered workflow keeps its OWN workflow-scoped concurrency
+  group with `cancel-in-progress: true`, so each workflow cancels its
+  own stale runs on a newer push:
+
+  ```yaml
+  concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
+    cancel-in-progress: true
+  ```
+
+- Do NOT share one concurrency group across workflows whose runs are
+  required checks. Concurrency permits only one run per group; when two
+  required workflows start simultaneously on the same group they cancel
+  each other and the required checks never report.
+
+- Scheduled and deploy workflows use their own group with
+  `cancel-in-progress: false`.
+
+The org standard runner for CI is `ubuntu-26.04-arm`.
+
 ## Changing these standards
 
 The org ruleset is managed by `scripts/apply-org-rulesets.sh` and the
