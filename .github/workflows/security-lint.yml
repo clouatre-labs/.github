@@ -142,10 +142,14 @@ jobs:
           node-version: "24"
       - name: Install dependencies
         if: inputs.markdown-lint-install != ''
-        run: ${{ inputs.markdown-lint-install }}
+        env:
+          MARKDOWN_LINT_INSTALL: ${{ inputs.markdown-lint-install }}
+        run: $MARKDOWN_LINT_INSTALL
       - name: Extra markdown checks
         if: inputs.markdown-extra-check != ''
-        run: ${{ inputs.markdown-extra-check }}
+        env:
+          MARKDOWN_EXTRA_CHECK: ${{ inputs.markdown-extra-check }}
+        run: $MARKDOWN_EXTRA_CHECK
 
   security-result:
     name: Security Result
