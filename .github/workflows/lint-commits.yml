@@ -56,8 +56,11 @@ jobs:
             @commitlint/cli@21.2.1 \
             @commitlint/config-conventional@21.2.0
       - name: Validate commit messages
+        env:
+          BASE_SHA: ${{ inputs.base-sha }}
+          HEAD_SHA: ${{ inputs.head-sha }}
         run: |
           npx commitlint \
-            --from "${{ inputs.base-sha }}" \
-            --to "${{ inputs.head-sha }}" \
+            --from "$BASE_SHA" \
+            --to "$HEAD_SHA" \
             --verbose
