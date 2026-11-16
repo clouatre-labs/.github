@@ -36,7 +36,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24"
+          node-version: "26"
       # Cache the installed tree, not ~/.npm: restoring the npm cache still
       # pays full install cost (24s cache download + 13-56s install measured
       # on oci-arm). commitlint is pure JS and versions are pinned below, so
