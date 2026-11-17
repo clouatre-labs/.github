@@ -12,8 +12,10 @@ This org standardizes CI through three reusable golden workflows in
 
 ## Design rules
 
-- Golden workflows are reusable via `workflow_call` with a `runner_label` input
-  so public repos can pick a GitHub-hosted runner.
+- Golden workflows are reusable via `workflow_call` with a `runner_label` input.
+  Runner policy, no exceptions: public repos pass a GitHub-hosted label
+  (`ubuntu-26.04-arm`; self-hosted runners on public repos let fork PRs run
+  code on your hardware), private repos pass `oci-arm`.
 - Top-level and job-level `permissions` blocks are always present and minimal.
 - All actions are pinned to full commit SHA.
 - SARIF publishing happens only in golden workflows; fleet repo stubs never
