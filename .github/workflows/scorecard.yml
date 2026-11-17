@@ -34,10 +34,18 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Resolve visibility
+        id: meta
+        # github.event.repository is absent on schedule events, so visibility
+        # is resolved from the API once and reused by every step below.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "visibility=$(gh api "repos/$GITHUB_REPOSITORY" --jq .visibility)" >> "$GITHUB_OUTPUT"
+
       - name: Run OpenSSF Scorecard
         id: analysis
         # Scorecard is only supported on public repositories.
-        if: github.event.repository.visibility == 'public'
+        if: steps.meta.outputs.visibility == 'public'
         continue-on-error: true
         uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
         with:
@@ -50,7 +58,7 @@ jobs:
         # Upstream bug ossf/scorecard#5382: org IP allow lists break the
         # third-party app check suites, failing the action even for healthy
         # repos. The public API mirrors the published weekly score.
-        if: always() && steps.analysis.outcome == 'failure' && github.event.repository.private == false
+        if: always() && steps.analysis.outcome == 'failure' && steps.meta.outputs.visibility == 'public'
         run: |
           set -euo pipefail
           api="https://api.securityscorecards.dev/projects/github.com/${{ github.repository }}"
