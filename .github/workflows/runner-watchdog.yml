@@ -1,6 +1,7 @@
 name: Runner Watchdog
 
 # Reusable: alerts when CI runs on the oci-arm self-hosted runner stall
+# Methodology: docs/golden-workflows.md
 # (queued > 20 minutes). A stalled runner has no native fallback: jobs queue
 # indefinitely until the runner returns (systemd auto-restarts it in minutes;
 # OCI outages need manual intervention). This workflow makes the stall visible

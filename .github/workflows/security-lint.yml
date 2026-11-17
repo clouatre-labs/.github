@@ -1,4 +1,5 @@
 # Reusable security and lint jobs shared across the organization (base
+# Methodology: docs/golden-workflows.md
 # variant; zizmor runs read-only). Repos that upload zizmor findings as
 # SARIF code scanning results call security-lint-sarif.yml instead, so
 # callers never need to grant security-events: write they do not use.
