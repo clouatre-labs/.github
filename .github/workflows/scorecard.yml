@@ -51,7 +51,7 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
-          publish: true
+          publish_results: true
 
       - name: Fallback to public OSSF API
         id: fallback
