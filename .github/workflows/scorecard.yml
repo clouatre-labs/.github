@@ -62,10 +62,20 @@ jobs:
         run: |
           set -euo pipefail
           api="https://api.securityscorecards.dev/projects/github.com/${{ github.repository }}"
-          if ! score=$(curl -fsS "$api" | jq -e '.score'); then
-            echo "::error::Public OSSF API query failed; no scorecard data available"
+          code=$(curl -sS -o /tmp/scorecard.json -w '%{http_code}' "$api")
+          if [ "$code" = "404" ]; then
+            # OSSF has not indexed this repo; with the local run blocked by
+            # ossf/scorecard#5382 there is no signal available. Warn, do not
+            # mask a future failure silently: the summary makes it explicit.
+            echo "::warning::No public OSSF Scorecard data for this repo; local run blocked by ossf/scorecard#5382"
+            echo "### WARNING: scorecard blocked by ossf/scorecard#5382 and repo not indexed by the public OSSF API; no scorecard signal this run." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$code" != "200" ]; then
+            echo "::error::Public OSSF API query failed with HTTP $code"
             exit 1
           fi
+          score=$(jq -e '.score' /tmp/scorecard.json)
           {
             echo "### WARNING: scorecard internal error matched the known upstream bug ossf/scorecard#5382 (org IP allow list on third-party app check suites)."
             echo "Public OSSF API reports score ${score} as of $(date -u +%Y-%m-%d); treated as pass-with-warning."
