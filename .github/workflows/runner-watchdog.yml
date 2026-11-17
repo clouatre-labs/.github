@@ -1,0 +1,100 @@
+name: Runner Watchdog
+
+# Reusable: alerts when CI runs on the oci-arm self-hosted runner stall
+# (queued > 20 minutes). A stalled runner has no native fallback: jobs queue
+# indefinitely until the runner returns (systemd auto-restarts it in minutes;
+# OCI outages need manual intervention). This workflow makes the stall visible
+# instead of silent. It runs on a GitHub-hosted runner so it works when the
+# self-hosted runner is dead. Scheduled workflows can themselves be delayed or
+# dropped under GitHub load (documented); treat this as best-effort signal,
+# not SLA.
+#
+# The GH API calls retry transient errors (5xx, network) so a GitHub blip does
+# not fail the watchdog itself. Only runs created in the last 24h window are
+# considered: older queued runs are dispatch-wedge debris GitHub refuses to
+# cancel or delete, and do not indicate a live runner outage.
+
+on:
+  workflow_call:
+
+permissions:
+  actions: read
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 5
+    steps:
+      - name: Detect stalled runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cutoff=$(date -u -d '-20 minutes' +%Y-%m-%dT%H:%M:%SZ)
+          upper=$(date -u -d '-24 hours' +%Y-%m-%dT%H:%M:%SZ)
+
+          # Retry transient GitHub API errors (5xx, network); give up after 3
+          # attempts, printing gh's error output each time.
+          gh_retry() {
+            local attempt out
+            for attempt in 1 2 3; do
+              if out=$("$@" 2>gh_err.log); then
+                printf '%s' "$out"
+                return 0
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "::error::GitHub API unreachable after 3 attempts:"
+                cat gh_err.log
+                exit 1
+              fi
+              echo "GitHub API attempt $attempt failed (transient?), retrying in 30s:"
+              cat gh_err.log
+              sleep 30
+            done
+          }
+
+          # Server-side status + created filters keep each call O(matches);
+          # paginating the full run history timed out the 5-minute job budget
+          # on 2026-11-06 (clouatre.ca run history). Runs created inside the
+          # window and still queued/pending are exactly the candidates.
+          candidates=$(gh_retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100&status=queued&created=$upper..$cutoff" \
+              --jq '.workflow_runs[]
+                  | select(.name != "Runner Watchdog")
+                  | [.database_id, .name, .head_branch, .created_at, .head_sha, .event] | @tsv'
+            gh_retry gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100&status=pending&created=$upper..$cutoff" \
+              --jq '.workflow_runs[]
+                  | select(.name != "Runner Watchdog")
+                  | [.database_id, .name, .head_branch, .created_at, .head_sha, .event] | @tsv')
+
+          # A stalled run on a closed PR (or an orphaned head commit left by a
+          # force-push) is dispatch-wedge debris GitHub refuses to cancel —
+          # see clouatre.ca run 42299363926 (PR #2247) on 2026-11-07, where
+          # cancel, rerun, and branch deletion all failed to clear it. Only
+          # runs on OPEN pull requests indicate a real runner outage, so each
+          # candidate is checked against commits/<sha>/pulls (one call per
+          # stalled run; they are rare by construction).
+          stalled=""
+          debris=""
+          while IFS=$'\t' read -r id name branch created sha event; do
+            [ -z "$id" ] && continue
+            if [ "$event" = "pull_request" ] \
+               && gh_retry gh api "repos/${GITHUB_REPOSITORY}/commits/$sha/pulls" \
+                    --jq 'any(.[]; .state == "open")' | grep -q true; then
+              stalled+="$id\t$name\t$branch\t$created"$'\n'
+            else
+              debris+="$id\t$name\t$branch\t$created (closed PR / orphaned commit - inert)"$'\n'
+            fi
+          done <<< "$candidates"
+
+          if [ -n "$debris" ]; then
+            echo "Stale dispatch-wedge debris (no action needed):"
+            printf '%s' "$debris"
+          fi
+          if [ -n "$stalled" ]; then
+            echo "::error::Runs stalled (queued > 20 min) — self-hosted runner likely down:"
+            printf '%s' "$stalled"
+            echo "Recovery: check runner host (systemctl status actions.runner.*),"
+            echo "or push the branch to a NEW branch + new PR if dispatch is wedged."
+            exit 1
+          fi
+          echo "No stalled runs."
