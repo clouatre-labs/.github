@@ -28,6 +28,10 @@ jobs:
     name: Lint Commits
     runs-on: ${{ inputs.label }}
     timeout-minutes: 5
+    # Push events have no PR base/head SHAs; callers passing empty inputs
+    # would make commitlint exit 9 ("Invalid input flags"). A skipped job
+    # still satisfies downstream CI Result aggregation.
+    if: inputs.base-sha != '' && inputs.head-sha != ''
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
