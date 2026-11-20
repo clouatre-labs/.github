@@ -28,11 +28,24 @@ jobs:
     name: Lint Commits
     runs-on: ${{ inputs.label }}
     timeout-minutes: 5
+    # Push events have no PR base/head SHAs; callers passing empty inputs
+    # would make commitlint exit 9 ("Invalid input flags"). A skipped job
+    # still satisfies downstream CI Result aggregation.
+    if: inputs.base-sha != '' && inputs.head-sha != ''
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - name: Fetch pinned head SHA
+        env:
+          HEAD_SHA: ${{ inputs.head-sha }}
+        # The pull/N/merge ref can be rebuilt or removed if the PR is
+        # squash-merged or force-pushed while this job runs, dropping
+        # head-sha from the checkout and making commitlint fail with
+        # "Invalid revision range". Fetch the pinned SHA directly; GitHub
+        # allows fetching arbitrary commit SHAs.
+        run: git fetch origin "$HEAD_SHA"
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:

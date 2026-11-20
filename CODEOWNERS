@@ -1,0 +1,4 @@
+# Golden workflows in this directory are executed by every consumer repo in
+# the org (pinned by commit SHA); changes here are effectively fleet-wide
+# rollouts and require maintainers review.
+.github/workflows/ @clouatre-labs/maintainers

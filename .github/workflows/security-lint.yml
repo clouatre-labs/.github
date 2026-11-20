@@ -1,4 +1,5 @@
 # Reusable security and lint jobs shared across the organization (base
+# Methodology: docs/golden-workflows.md
 # variant; zizmor runs read-only). Repos that upload zizmor findings as
 # SARIF code scanning results call security-lint-sarif.yml instead, so
 # callers never need to grant security-events: write they do not use.
@@ -151,10 +152,67 @@ jobs:
           MARKDOWN_EXTRA_CHECK: ${{ inputs.markdown-extra-check }}
         run: $MARKDOWN_EXTRA_CHECK
 
+  runner-policy:
+    name: Runner policy
+    # Org runner-label policy: private repos run jobs on oci-arm (self-hosted);
+    # public repos run on GitHub-hosted ubuntu-26.04-arm (self-hosted runners on
+    # public repos are a security risk). Enforcement is layered: the
+    # oci-arm-private runner group restricts which repos can use the self-hosted
+    # runners at all, and this job fails any PR introducing a violating label.
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Enforce org runner-label policy
+        run: |
+          set -euo pipefail
+          # Retry transient GitHub API errors (5xx, network); give up after 3
+          # attempts.
+          gh_retry() {
+            local attempt out
+            for attempt in 1 2 3; do
+              if out=$("$@" 2>gh_err.log); then
+                printf '%s' "$out"
+                return 0
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "::error::GitHub API unreachable after 3 attempts:"
+                cat gh_err.log
+                exit 1
+              fi
+              sleep 30
+            done
+          }
+          vis=$(gh_retry gh api "repos/${GITHUB_REPOSITORY}" --jq .visibility)
+          echo "Repo visibility: $vis"
+          if [ "$vis" = "PUBLIC" ]; then
+            bad='oci-arm|self-hosted'
+            why='public repos must not use self-hosted runners'
+          else
+            bad='ubuntu-|windows-|macos-'
+            why='private repos must use the oci-arm self-hosted runner'
+          fi
+          # Literal labels only; expression-based labels are not statically
+          # verifiable and are exempt.
+          violations=$(grep -RnE 'runs-on:[[:space:]]*[^$]' .github/workflows --include='*.yml' --include='*.yaml' \
+            | grep -Ev 'runs-on:[[:space:]]*\$\{\{' \
+            | grep -E "runs-on:.*($bad)" || true)
+          if [ -n "$violations" ]; then
+            echo "::error::Runner policy violation ($why):"
+            printf '%s\n' "$violations"
+            exit 1
+          fi
+          echo "Runner policy OK"
+
   security-result:
     name: Security Result
     runs-on: ${{ inputs.label }}
-    needs: [secrets, zizmor, reuse, markdown-lint]
+    needs: [secrets, zizmor, reuse, markdown-lint, runner-policy]
     if: always()
     timeout-minutes: 5
     permissions: {}
