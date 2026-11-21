@@ -400,8 +400,18 @@ apply_repo() {
         '{name: $n, new_name: $n, color: $c, description: $d}' |
         gh api --method PATCH "/repos/${ORG}/${repo}/labels/$(jq -rn --arg n "${name}" '$n | @uri')" \
           --header "Content-Type: application/json" --input - 2>&1 >/dev/null)"; then
-        echo "FAILED: label '${name}' for ${repo}: POST: ${err} | PATCH: ${patch_err}"
-        return 1
+        # Installation tokens intermittently get 500/502 on label PATCH even
+        # when the write lands server-side. Verify against desired state
+        # before failing; only a real mismatch counts as failure.
+        local got
+        got="$(gh api "/repos/${ORG}/${repo}/labels/$(jq -rn --arg n "${name}" '$n | @uri')" 2>/dev/null \
+          | jq -r '[.color, (.description // "")] | @tsv')"
+        if [[ "${got}" == "${color}"$'\t'"${desc}" ]]; then
+          echo "label '${name}' already at desired state (PATCH server error was cosmetic)"
+        else
+          echo "FAILED: label '${name}' for ${repo}: POST: ${err} | PATCH: ${patch_err}"
+          return 1
+        fi
       fi
     fi
   done < <(echo "${LABELS_JSON}" | jq -c '.[]')
