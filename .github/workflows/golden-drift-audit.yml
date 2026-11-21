@@ -27,6 +27,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       ORG: clouatre-labs
+      APTU_DEV_ORG: aptu-dev
+      APTU_DEV_TOKEN: ${{ secrets.APTU_DEV_PAT }}
     steps:
       - name: Resolve golden SHAs
         run: |
@@ -37,23 +39,36 @@ jobs:
           cat golden-shas.txt
 
       - name: Compare fleet pins
+        env:
+          APTU_DEV_TOKEN: ${{ secrets.APTU_DEV_PAT }}
         run: |
-          : > drift-report.txt
-          for repo in $(gh repo list "$ORG" --limit 100 --json name,visibility,isArchived \
-              -q '.[] | select(.visibility=="PUBLIC" and (.isArchived|not)) | .name' | sort); do
-            for wf in $(gh api "repos/$ORG/$repo/contents/.github/workflows" --jq '.[].name' 2>/dev/null); do
-              gh api "repos/$ORG/$repo/contents/.github/workflows/$wf?ref=main" --jq .content | base64 -d \
-                | grep -oE "$ORG/\.github/\.github/workflows/[A-Za-z0-9-]+\.yml@[0-9a-f]{40}" \
-                | while read -r pin; do
-                  file=${pin##*/}; file=${file%%@*}; sha=${pin##*@}
-                  want=$(awk -v f="$file" '$1==f{print $2}' golden-shas.txt)
-                  [ -n "$want" ] || echo "UNKNOWN golden file $file in $repo/$wf" >> drift-report.txt
-                  if [ -n "$want" ] && [ "$sha" != "$want" ]; then
-                    echo "$repo|$wf|$file|$sha|$want" >> drift-report.txt
-                  fi
-                done
+          audit_org() {
+            local org=$1 token=$2
+            # The second-org token may not exist yet; skip with a warning so
+            # the audit still succeeds without the secret.
+            if [ -z "$token" ]; then
+              echo "WARNING: token for org $org is empty; skipping $org audit" >&2
+              return 0
+            fi
+            for repo in $(GH_TOKEN="$token" gh repo list "$org" --limit 100 --json name,visibility,isArchived \
+                -q '.[] | select(.visibility=="PUBLIC" and (.isArchived|not)) | .name' | sort); do
+              for wf in $(GH_TOKEN="$token" gh api "repos/$org/$repo/contents/.github/workflows" --jq '.[].name' 2>/dev/null); do
+                GH_TOKEN="$token" gh api "repos/$org/$repo/contents/.github/workflows/$wf?ref=main" --jq .content | base64 -d \
+                  | grep -oE "$ORG/\.github/\.github/workflows/[A-Za-z0-9-]+\.yml@[0-9a-f]{40}" \
+                  | while read -r pin; do
+                      file=${pin##*/}; file=${file%%@*}; sha=${pin##*@}
+                      want=$(awk -v f="$file" '$1==f{print $2}' golden-shas.txt)
+                      [ -n "$want" ] || echo "UNKNOWN golden file $file in $org/$repo/$wf" >> drift-report.txt
+                      if [ -n "$want" ] && [ "$sha" != "$want" ]; then
+                        echo "$org|$repo|$wf|$file|$sha|$want" >> drift-report.txt
+                      fi
+                    done
+              done
             done
-          done
+          }
+          : > drift-report.txt
+          audit_org "$ORG" "$GH_TOKEN"
+          audit_org "$APTU_DEV_ORG" "$APTU_DEV_TOKEN"
           if [ -s drift-report.txt ]; then
             cat drift-report.txt
             exit 1
@@ -63,8 +78,8 @@ jobs:
       - name: Open drift issues
         if: failure()
         run: |
-          while IFS='|' read -r repo _; do
-            pins=$(grep "^$repo|" drift-report.txt | while IFS='|' read -r _ wf f got want; do
+          while IFS='|' read -r org repo; do
+            pins=$(grep "^$org|$repo|" drift-report.txt | while IFS='|' read -r _ wf f got want; do
               echo "- \`$f\` pinned to \`${got:0:12}\` in \`$wf\`, latest golden is \`${want:0:12}\`"
             done)
             {
@@ -74,10 +89,16 @@ jobs:
               echo ""
               echo "Remediation: bump each pin to the listed golden SHA and push a GPG-signed, DCO-signed commit (API commits are unsigned and rejected by the org ruleset)."
             } > body.md
-            gh issue create -R "$ORG/$repo" \
-              --title "ci: golden workflow pin drift detected" \
-              --body-file body.md || true
-          done < <(cut -d'|' -f1 drift-report.txt | sort -u)
+            if [ "$org" = "$APTU_DEV_ORG" ]; then
+              GH_TOKEN="$APTU_DEV_TOKEN" gh issue create -R "$org/$repo" \
+                --title "ci: golden workflow pin drift detected" \
+                --body-file body.md || true
+            else
+              gh issue create -R "$org/$repo" \
+                --title "ci: golden workflow pin drift detected" \
+                --body-file body.md || true
+            fi
+          done < <(cut -d'|' -f1,2 drift-report.txt | sort -u)
 
   ci-result:
     name: CI Result
