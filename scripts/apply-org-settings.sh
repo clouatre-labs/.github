@@ -347,13 +347,17 @@ fi
 FAILED=0
 
 # Org-level Actions permissions: enforce SHA pinning of actions and reusable
-# workflows (org setting, PUT is idempotent; re-applied if drifted). The PUT
-# requires org administration rights on the token.
-if [[ "$(gh api "orgs/${ORG}/actions/permissions" --jq '.sha_pinning_required')" != "true" ]]; then
+# workflows. NOTE: these endpoints reject App installation tokens (403), so
+# under the app token this logs a warning and continues; re-assert the
+# setting with an admin user token when it drifts:
+#   gh api -X PUT orgs/$ORG/actions/permissions -f allowed_actions=all \
+#     -f enabled_repositories=all -F sha_pinning_required=true
+if [[ "$(gh api "orgs/${ORG}/actions/permissions" --jq '.sha_pinning_required' 2>/dev/null)" != "true" ]]; then
   echo "Enforcing org Actions sha_pinning_required=true for ${ORG}"
-  gh api -X PUT "orgs/${ORG}/actions/permissions" \
-    -f allowed_actions=all -f enabled_repositories=all -F sha_pinning_required=true \
-    || FAILED=1
+  if ! gh api -X PUT "orgs/${ORG}/actions/permissions" \
+    -f allowed_actions=all -f enabled_repositories=all -F sha_pinning_required=true; then
+    echo "WARNING: could not set org Actions permissions with this token (App installations are rejected). Re-run with an admin user token."
+  fi
 fi
 
 # Step-summary file for the community files sync section; created once.
