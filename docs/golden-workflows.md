@@ -18,6 +18,7 @@ This org standardizes CI through three reusable golden workflows in
   code on your hardware), private repos pass `oci-arm`.
 - Top-level and job-level `permissions` blocks are always present and minimal.
 - All actions are pinned to full commit SHA.
+- Checkout steps set `persist-credentials: false`; read-only jobs never persist the runner token.
 - SARIF publishing happens only in golden workflows; fleet repo stubs never
   upload SARIF directly.
 - Deterministic fallback for known upstream bugs: org IP allow lists can

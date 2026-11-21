@@ -78,6 +78,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       # TruffleHog is used instead of gitleaks/gitleaks-action because gitleaks-action
       # requires a GITLEAKS_LICENSE org secret for GitHub Organisation repos (free tier
       # available but requires registration). TruffleHog has no per-org licensing gate.
@@ -98,6 +99,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Lint GitHub Actions workflows
         uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
         with:
@@ -116,6 +119,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Check REUSE compliance
         uses: fsfe/reuse-action@676e2d560c9a403aa252096d99fcab3e1132b0f5 # v6.0.0
 
@@ -129,6 +134,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Lint with markdownlint-cli2
         # before any caller-supplied install, so node_modules markdown files
         # pulled in by markdown-lint-install never leak into the lint globs
