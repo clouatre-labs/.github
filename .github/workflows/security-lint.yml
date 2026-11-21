@@ -189,8 +189,10 @@ jobs:
             done
           }
           vis=$(gh_retry gh api "repos/${GITHUB_REPOSITORY}" --jq .visibility)
+          # REST returns lowercase ("public"); GraphQL returns uppercase.
+          vis=${vis,,}
           echo "Repo visibility: $vis"
-          if [ "$vis" = "PUBLIC" ]; then
+          if [ "$vis" = "public" ]; then
             bad='oci-arm|self-hosted'
             why='public repos must not use self-hosted runners'
           else
