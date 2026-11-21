@@ -25,6 +25,13 @@ This org standardizes CI through three reusable golden workflows in
   (ossf/scorecard#5382); a fallback queries `api.securityscorecards.dev`
   and reports pass-with-warning on 200 or 404, failing on any other error.
 
+- Golden workflow pin alignment is audited weekly by
+  `golden-drift-audit.yml` in this repo: it diffs every public repo's
+  `*.yml@SHA` pins against the latest commit touching each golden file and,
+  on drift, opens one issue per drifted repo and fails so CI Result goes
+  red. Remediation is manual (GPG-signed commits); the org Renovate preset
+  handles routine bumps between audits.
+
 ## Fleet rollout playbook
 
 Inventory the org's repositories, copy the golden workflows into the org
