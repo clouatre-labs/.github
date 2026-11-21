@@ -1,0 +1,95 @@
+# Golden workflow pin drift audit for the organization.
+# Methodology: docs/golden-workflows.md
+# Compares every public repo's `clouatre-labs/.github/.github/workflows/*.yml@SHA`
+# pins against the latest commit SHA touching each golden file on this repo's
+# main branch. On drift, opens one issue per drifted repo listing the stale
+# pins and fails so CI Result goes red; remediation (signed commits) is
+# manual by design - the org ruleset rejects unsigned API commits.
+name: Golden Drift Audit
+
+on:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    name: Drift Audit
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ORG: clouatre-labs
+    steps:
+      - name: Resolve golden SHAs
+        run: |
+          for f in $(gh api "repos/$ORG/.github/contents/.github/workflows" --jq '.[].name' | grep '\.yml$'); do
+            sha=$(gh api "repos/$ORG/.github/commits?sha=main&path=.github/workflows/$f&per_page=1" --jq '.[0].sha')
+            echo "$f $sha" >> golden-shas.txt
+          done
+          cat golden-shas.txt
+
+      - name: Compare fleet pins
+        run: |
+          : > drift-report.txt
+          for repo in $(gh repo list "$ORG" --limit 100 --json name,visibility,isArchived \
+              -q '.[] | select(.visibility=="PUBLIC" and (.isArchived|not)) | .name' | sort); do
+            for wf in $(gh api "repos/$ORG/$repo/contents/.github/workflows" --jq '.[].name' 2>/dev/null); do
+              gh api "repos/$ORG/$repo/contents/.github/workflows/$wf?ref=main" --jq .content | base64 -d \
+                | grep -oE "$ORG/\.github/\.github/workflows/[A-Za-z0-9-]+\.yml@[0-9a-f]{40}" \
+                | while read -r pin; do
+                  file=${pin##*/}; file=${file%%@*}; sha=${pin##*@}
+                  want=$(awk -v f="$file" '$1==f{print $2}' golden-shas.txt)
+                  [ -n "$want" ] || echo "UNKNOWN golden file $file in $repo/$wf" >> drift-report.txt
+                  if [ -n "$want" ] && [ "$sha" != "$want" ]; then
+                    echo "$repo|$wf|$file|$sha|$want" >> drift-report.txt
+                  fi
+                done
+            done
+          done
+          if [ -s drift-report.txt ]; then
+            cat drift-report.txt
+            exit 1
+          fi
+          echo "Zero drift across fleet pins."
+
+      - name: Open drift issues
+        if: failure()
+        run: |
+          while IFS='|' read -r repo _; do
+            pins=$(grep "^$repo|" drift-report.txt | while IFS='|' read -r _ wf f got want; do
+              echo "- \`$f\` pinned to \`${got:0:12}\` in \`$wf\`, latest golden is \`${want:0:12}\`"
+            done)
+            {
+              echo "Golden workflow pin drift detected by the weekly audit."
+              echo ""
+              echo "$pins"
+              echo ""
+              echo "Remediation: bump each pin to the listed golden SHA and push a GPG-signed, DCO-signed commit (API commits are unsigned and rejected by the org ruleset)."
+            } > body.md
+            gh issue create -R "$ORG/$repo" \
+              --title "ci: golden workflow pin drift detected" \
+              --body-file body.md || true
+          done < <(cut -d'|' -f1 drift-report.txt | sort -u)
+
+  ci-result:
+    name: CI Result
+    runs-on: ubuntu-26.04-arm
+    needs: audit
+    if: always()
+    permissions: {}
+    steps:
+      - name: All checks passed
+        run: |
+          if [ "${{ needs.audit.result }}" != "success" ]; then
+            echo "Drift audit found drift; see the audit job log and repo issues." >&2
+            exit 1
+          fi
+          echo "CI Result passed."
