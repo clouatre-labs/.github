@@ -77,7 +77,7 @@ jobs:
           persist-credentials: false
 
       - name: Mint GitHub App token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0 # zizmor: ignore[github-app] scoped via permission-administration, permission-issues, permission-pull-requests, and permission-contents inputs; repo settings updates need repo administration write, label sync needs issues write, community file sync needs contents and pull requests write; org repo listing needs metadata read only (implied by any repository permission)
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0 # zizmor: ignore[github-app] scoped via permission-administration, permission-issues, permission-pull-requests, and permission-contents inputs; repo settings updates need repo administration write, label sync needs issues write, community file sync needs contents and pull requests write; org repo listing needs metadata read only (implied by any repository permission)
         id: app-token
         with:
           client-id: ${{ vars.ORG_APP_CLIENT_ID }}
