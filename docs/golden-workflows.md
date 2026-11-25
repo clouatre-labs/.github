@@ -1,9 +1,8 @@
 # Golden Workflow Methodology
 
-This org standardizes CI through three reusable golden workflows in
+This org standardizes CI through two reusable golden workflows in
 `clouatre-labs/.github`:
 
-- `scorecard.yml` - OpenSSF Scorecard analysis with SARIF publishing.
 - `security-lint.yml` / `security-lint-sarif.yml` - secret scanning
   (TruffleHog), zizmor audit, REUSE compliance, markdownlint; `-sarif` also
   uploads zizmor findings to code scanning.
@@ -22,11 +21,6 @@ This org standardizes CI through three reusable golden workflows in
   persist the runner token.
 - SARIF publishing happens only in golden workflows; fleet repo stubs never
   upload SARIF directly.
-- Deterministic fallback for known upstream bugs: org IP allow lists can
-  break the third-party app check-suite webhook in scorecard-action
-  (ossf/scorecard#5382); a fallback queries `api.securityscorecards.dev`
-  and reports pass-with-warning on 200 or 404, failing on any other error.
-
 - Golden workflow pin alignment is audited weekly by
   `golden-drift-audit.yml` in this repo: it diffs every public repo's
   `*.yml@SHA` pins against the latest commit touching each golden file and,
